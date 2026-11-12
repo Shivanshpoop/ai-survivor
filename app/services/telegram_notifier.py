@@ -13,10 +13,14 @@ MENU_KEYBOARD = {
     "is_persistent": True,
 }
 
+def _bot_creds():
+    return settings.TELEGRAM_BOT_TOKEN.strip(), str(settings.TELEGRAM_CHAT_ID).strip()
+
 async def register_telegram_commands_and_webhook():
-    if not settings.TELEGRAM_BOT_TOKEN:
-        return {"ok": False, "reason": "TELEGRAM_BOT_TOKEN missing in Render Environment"}
-    base = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}"
+    token, chat_id = _bot_creds()
+    if not token:
+        return {"ok": False, "reason": "TELEGRAM_BOT_TOKEN missing"}
+    base = f"https://api.telegram.org/bot{token}"
     commands = [
         {"command": "start", "description": "Open Control Menu & Live Status"},
         {"command": "status", "description": "Live Capital, Revenue & Active Agents"},
@@ -31,12 +35,12 @@ async def register_telegram_commands_and_webhook():
             r1 = await client.post(f"{base}/setMyCommands", json={"commands": commands})
             results["commands"] = r1.json()
             webhook_url = f"{settings.PUBLIC_STORE_URL.rstrip('/')}/api/telegram/webhook"
-            r2 = await client.post(f"{base}/setWebhook", json={"url": webhook_url})
+            r2 = await client.post(f"{base}/setWebhook", json={"url": webhook_url, "drop_pending_updates": True})
             results["webhook"] = r2.json()
-            if settings.TELEGRAM_CHAT_ID:
+            if chat_id:
                 r3 = await client.post(f"{base}/sendMessage", json={
-                    "chat_id": settings.TELEGRAM_CHAT_ID,
-                    "text": "✅ NovaCraft Autonomous Bot Menu & 30-Second Live Pulse Activated!",
+                    "chat_id": chat_id,
+                    "text": "✅ NovaCraft Menu Connected! Tap any button below.",
                     "reply_markup": MENU_KEYBOARD,
                 })
                 results["menu_pushed"] = r3.json()
@@ -44,11 +48,13 @@ async def register_telegram_commands_and_webhook():
         results["error"] = str(e)
     return results
 
-async def send_telegram_alert(text: str, with_menu: bool = True):
-    if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
+async def send_telegram_alert(text: str, with_menu: bool = True, target_chat_id: str = ""):
+    token, default_chat = _bot_creds()
+    chat_id = target_chat_id.strip() or default_chat
+    if not token or not chat_id:
         return False
-    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": settings.TELEGRAM_CHAT_ID, "text": text}
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
     if with_menu:
         payload["reply_markup"] = MENU_KEYBOARD
     try:
@@ -59,19 +65,20 @@ async def send_telegram_alert(text: str, with_menu: bool = True):
         return False
 
 async def update_live_heartbeat(text: str):
-    if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_CHAT_ID:
+    token, chat_id = _bot_creds()
+    if not token or not chat_id:
         return
-    base = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}"
+    base = f"https://api.telegram.org/bot{token}"
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             old_id = LIVE_STATUS_STATE.get("message_id")
             if old_id:
                 await client.post(f"{base}/deleteMessage", json={
-                    "chat_id": settings.TELEGRAM_CHAT_ID,
+                    "chat_id": chat_id,
                     "message_id": old_id,
                 })
             r = await client.post(f"{base}/sendMessage", json={
-                "chat_id": settings.TELEGRAM_CHAT_ID,
+                "chat_id": chat_id,
                 "text": text,
                 "reply_markup": MENU_KEYBOARD,
             })
