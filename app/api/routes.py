@@ -507,3 +507,4 @@ def backup_db():
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
 
+
