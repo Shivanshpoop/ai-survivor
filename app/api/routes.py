@@ -1,9 +1,10 @@
 ﻿import shutil
+import secrets
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Header
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -167,7 +168,7 @@ def check_order_status(order_id: str, db: Session = Depends(get_db)):
 
 @router.get("/api/orders/{order_id}/approve-upi")
 async def approve_upi_order_via_link(order_id: str, token: str = Query(...), db: Session = Depends(get_db)):
-    if token != settings.ADMIN_TOKEN:
+    if not settings.ADMIN_TOKEN or not secrets.compare_digest(token, settings.ADMIN_TOKEN):
         raise HTTPException(status_code=401, detail="Unauthorized approval token")
 
     order = db.query(RealOrder).filter(RealOrder.id == order_id).first()
@@ -273,12 +274,24 @@ def toggle_autonomy():
     AUTONOMY_STATE["auto_run_enabled"] = not AUTONOMY_STATE["auto_run_enabled"]
     return {"auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"]}
 
-@router.get("/api/telegram/setup")
+@router.get("/api/telegram/setup", dependencies=[Depends(verify_admin_token)])
 async def setup_telegram_endpoint():
     return await register_telegram_commands_and_webhook()
 
 @router.post("/api/telegram/webhook")
-async def telegram_webhook(req: Request, db: Session = Depends(get_db)):
+async def telegram_webhook(
+    req: Request,
+    telegram_secret: Optional[str] = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token"),
+    db: Session = Depends(get_db),
+):
+    expected_secret = settings.TELEGRAM_WEBHOOK_SECRET.strip()
+    if not expected_secret or not telegram_secret or not secrets.compare_digest(telegram_secret, expected_secret):
+        raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
+
+    allowed_id = str(settings.TELEGRAM_CHAT_ID).strip()
+    if not allowed_id:
+        raise HTTPException(status_code=503, detail="Telegram control chat is not configured")
+
     data = await req.json()
     msg = data.get("message") or data.get("edited_message") or {}
     chat_id = str(msg.get("chat", {}).get("id", "")).strip()
@@ -287,10 +300,8 @@ async def telegram_webhook(req: Request, db: Session = Depends(get_db)):
     if not chat_id or not text:
         return {"ok": True}
 
-    allowed_id = str(settings.TELEGRAM_CHAT_ID).strip()
-    if allowed_id and chat_id != allowed_id:
-        await send_telegram_alert(f"⚠️ Unauthorized Chat ID: {chat_id}. Set TELEGRAM_CHAT_ID={chat_id} in Render.", target_chat_id=chat_id)
-        return {"ok": False}
+    if chat_id != allowed_id:
+        raise HTTPException(status_code=403, detail="Unauthorized Telegram chat")
 
     if "start" in text or "status" in text:
         state = check_survival_condition(db)

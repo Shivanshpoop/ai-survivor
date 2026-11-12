@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
+    TELEGRAM_WEBHOOK_SECRET: str = ""
     AUTO_CYCLE_INTERVAL_SECONDS: int = 30
 
     FAMPAY_UPI_ID: str = "YOUR_DEMO_UPI_ID"
