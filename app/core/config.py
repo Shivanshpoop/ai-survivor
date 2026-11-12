@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = ""
     AUTO_CYCLE_INTERVAL_SECONDS: int = 30
 
-    FAMPAY_UPI_ID: str = "yourname@fam"
+    FAMPAY_UPI_ID: str = "demo@upi"
     FAMPAY_PAYEE_NAME: str = "NovaCraft Studio"
-    BUSINESS_EMAIL: str = "hello@novacraftstudio.in"
+    BUSINESS_EMAIL: str = "contact@example.com"
     PUBLIC_STORE_URL: str = "https://ai-survivor.onrender.com"
 
     class Config:
