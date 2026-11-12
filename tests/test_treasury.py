@@ -92,6 +92,7 @@ def test_allocate_funds_to_agent_records_allocation(db_session):
 
     assert entry.entry_type == "ALLOCATION"
     assert entry.amount == pytest.approx(500.0)
+    assert entry.total_capital_after == pytest.approx(5000.0)
     assert agent.current_balance == pytest.approx(500.0)
     assert agent.allocated_budget == pytest.approx(500.0)
     assert state.treasury_balance == pytest.approx(4500.0)
@@ -117,6 +118,7 @@ def test_record_expense_reduces_agent_balance_and_tracks_expenses(db_session):
 
     assert entry.entry_type == "EXPENSE"
     assert entry.amount == pytest.approx(-125.0)
+    assert entry.total_capital_after == pytest.approx(4875.0)
     assert agent.current_balance == pytest.approx(375.0)
     assert agent.expenses == pytest.approx(125.0)
     assert state.total_expenses == pytest.approx(125.0)
