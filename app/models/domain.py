@@ -69,6 +69,31 @@ class Opportunity(Base):
     assigned_agent_id = Column(String, ForeignKey("agents.id"), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
+class DeliverableArtifact(Base):
+    __tablename__ = "deliverable_artifacts"
+    id = Column(String, primary_key=True, default=lambda: f"ART-{uuid.uuid4().hex[:6].upper()}")
+    opportunity_id = Column(String, ForeignKey("opportunities.id"), nullable=True)
+    agent_name = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    artifact_type = Column(String, nullable=False)
+    file_name = Column(String, nullable=False)
+    suggested_price_inr = Column(Float, default=299.0)
+    pitch_copy = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+class PaperBacktest(Base):
+    __tablename__ = "paper_backtests"
+    id = Column(String, primary_key=True, default=lambda: f"BT-{uuid.uuid4().hex[:6].upper()}")
+    strategy_name = Column(String, nullable=False)
+    symbol = Column(String, default="NIFTY50-SIM")
+    virtual_capital = Column(Float, default=10000.0)
+    net_return_pct = Column(Float, default=0.0)
+    win_rate_pct = Column(Float, default=0.0)
+    max_drawdown_pct = Column(Float, default=0.0)
+    sharpe_ratio = Column(Float, default=0.0)
+    verdict = Column(String, default="APPROVED")
+    created_at = Column(DateTime, default=utcnow)
+
 class AgentMessage(Base):
     __tablename__ = "agent_messages"
     id = Column(Integer, primary_key=True, autoincrement=True)

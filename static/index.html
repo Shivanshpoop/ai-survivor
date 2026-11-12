@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI SURVIVOR — Phase 2 & 3 Autonomous Command Center</title>
+  <title>AI SURVIVOR — Phase 4 & 5 Autonomous Business & Finance Engine</title>
   <style>
     :root {
       --bg: #0b0f17;
@@ -35,7 +35,7 @@
     }
     h1 { font-size: 1.35rem; }
     .sub { color: var(--muted); font-size: 0.85rem; }
-    input, select, button {
+    input, button {
       background: var(--panel);
       color: var(--text);
       border: 1px solid var(--border);
@@ -53,8 +53,8 @@
       font-size: 0.74rem;
       font-weight: 700;
     }
-    .ALIVE, .ACTIVE, .LOW, .COMPLETED, .APPROVED { background: rgba(16,185,129,0.18); color: var(--green); }
-    .DESTROYED, .CRITICAL, .REJECTED { background: rgba(239,68,68,0.2); color: var(--red); }
+    .ALIVE, .ACTIVE, .LOW, .COMPLETED, .APPROVED, .APPROVED_PAPER { background: rgba(16,185,129,0.18); color: var(--green); }
+    .DESTROYED, .CRITICAL, .REJECTED, .REJECTED_HIGH_RISK { background: rgba(239,68,68,0.2); color: var(--red); }
     .SUSPENDED, .ELEVATED, .SIM, .MEDIUM { background: rgba(245,158,11,0.2); color: var(--amber); }
     .grid-4 {
       display: grid;
@@ -81,15 +81,15 @@
     th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-    .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
     .agent-box { background: #0f1520; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>AI SURVIVOR — Phase 2 & 3 Multi-Agent Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
-      <div class="sub">Supreme Manager • Autonomous Cycles • Business Research & ROI Engine • Survival Monitor</div>
+      <h1>AI SURVIVOR — Phase 4 & 5 Autonomous Business Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
+      <div class="sub">Real Product Deliverables • Paper Trading Backtests • Cash-Flow Runway Forecasting • Auto-Reinvestment</div>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <input type="password" id="tokenInput" placeholder="Paste ADMIN_TOKEN" />
@@ -115,33 +115,38 @@
 
   <div class="grid-2">
     <div class="card">
-      <h2>Business Research, Competitor Gaps & Lean Plans</h2>
-      <div style="max-height:320px; overflow-y:auto;">
+      <h2>Built Products & Freelance Deliverables (Downloadable)</h2>
+      <div style="max-height:310px; overflow-y:auto;">
         <table>
-          <thead><tr><th>Opportunity</th><th>ROI / Economics</th><th>Plan & Gap</th></tr></thead>
-          <tbody id="opps"></tbody>
+          <thead><tr><th>Deliverable</th><th>Price & Pitch</th><th>Download</th></tr></thead>
+          <tbody id="artifacts"></tbody>
         </table>
       </div>
     </div>
     <div class="card">
-      <h2>Supreme Manager & Inter-Agent Communications</h2>
-      <div style="max-height:320px; overflow-y:auto;" id="msgs"></div>
+      <h2>Paper Trading Strategy Backtests (Sandbox Only)</h2>
+      <div style="max-height:310px; overflow-y:auto;">
+        <table>
+          <thead><tr><th>Strategy</th><th>Metrics</th><th>Verdict</th></tr></thead>
+          <tbody id="backtests"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <div class="grid-2">
     <div class="card">
+      <h2>Supreme Manager & Inter-Agent Communications</h2>
+      <div style="max-height:290px; overflow-y:auto;" id="msgs"></div>
+    </div>
+    <div class="card">
       <h2>Immutable Financial Ledger</h2>
-      <div style="max-height:280px; overflow-y:auto;">
+      <div style="max-height:290px; overflow-y:auto;">
         <table>
-          <thead><tr><th>Type</th><th>Amount</th><th>Total Capital</th><th>Details</th></tr></thead>
+          <thead><tr><th>Type</th><th>Amount</th><th>Total Cap</th><th>Details</th></tr></thead>
           <tbody id="ledger"></tbody>
         </table>
       </div>
-    </div>
-    <div class="card">
-      <h2>Security & Survival Audit Log</h2>
-      <div style="max-height:280px; overflow-y:auto;" id="audits"></div>
     </div>
   </div>
 
@@ -161,6 +166,21 @@
       refresh();
     }
 
+    async function downloadArtifact(fileName) {
+      const res = await fetch(`/api/artifacts/download/${encodeURIComponent(fileName)}`, { headers: headers() });
+      if (!res.ok) {
+        alert("Artifact file not found (note: Render free tier resets local disk on redeploy; run 1 cycle to generate fresh artifacts).");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
     async function refresh() {
       const res = await fetch("/api/state", { headers: headers() });
       if (!res.ok) {
@@ -178,7 +198,7 @@
         <div class="card">
           <div class="label">Total Reconciled Capital</div>
           <div class="val">₹${t.total_capital.toFixed(2)}</div>
-          <div class="sub">Initial: ₹${t.initial_capital.toFixed(2)} | Cycle #${t.cycle_count}</div>
+          <div class="sub">Start: ₹${t.initial_capital.toFixed(2)} | Cycle #${t.cycle_count}</div>
         </div>
         <div class="card">
           <div class="label">Central Treasury Cash</div>
@@ -191,9 +211,9 @@
           <div class="sub">Paper PnL: +₹${t.simulated_paper_pnl.toFixed(2)} (Isolated)</div>
         </div>
         <div class="card">
-          <div class="label">Survival Risk Level</div>
-          <div class="val"><span class="badge ${t.risk_level}">${t.risk_level}</span></div>
-          <div class="sub">Agent Balances Held: ₹${t.agent_held_balance.toFixed(2)}</div>
+          <div class="label">Cash-Flow Runway & Risk</div>
+          <div class="val"><span class="badge ${t.risk_level}">${t.risk_level}</span> ${t.runway_cycles} cycles</div>
+          <div class="sub">Burn: ₹${t.avg_burn_per_cycle}/cycle | Agent Cash: ₹${t.agent_held_balance.toFixed(2)}</div>
         </div>
       `;
 
@@ -204,8 +224,8 @@
             <span class="badge ${a.status}">${a.status}</span>
           </div>
           <div class="sub" style="margin:4px 0;">${a.id} • ${a.role}</div>
-          <div style="font-size:0.82rem; margin-bottom:6px;">${a.mission}</div>
-          <div style="font-size:0.81rem;">
+          <div style="font-size:0.81rem; margin-bottom:6px;">${a.mission}</div>
+          <div style="font-size:0.80rem;">
             Balance: <strong>₹${a.current_balance.toFixed(2)}</strong> / ₹${a.allocated_budget.toFixed(2)}<br/>
             Expenses: ₹${a.expenses.toFixed(2)} | Paper PnL: ₹${a.simulated_pnl.toFixed(2)}<br/>
             Score: <strong>${a.performance_score}</strong>/100 | Tasks: ${a.tasks_completed}
@@ -214,11 +234,19 @@
         </div>
       `).join("");
 
-      document.getElementById("opps").innerHTML = data.opportunities.map(o => `
+      document.getElementById("artifacts").innerHTML = data.artifacts.map(d => `
         <tr>
-          <td><strong>${o.title}</strong><br/><span class="badge ${o.status}">${o.status}</span> <span class="sub">${o.category}</span></td>
-          <td>Cost: ₹${o.estimated_cost}<br/>Est Rev: ₹${o.expected_revenue}<br/><strong>ROI: ${o.roi_percent}%</strong></td>
-          <td><div style="font-size:0.79rem;"><strong>Gap:</strong> ${o.competitor_gap}<br/><strong>Plan:</strong> ${o.business_plan}</div></td>
+          <td><strong>${d.file_name}</strong><br/><span class="badge ACTIVE">${d.artifact_type}</span><br/><span class="sub">By ${d.agent_name}</span></td>
+          <td><strong>₹${d.suggested_price_inr.toFixed(0)}</strong><br/><span style="font-size:0.79rem;">${d.pitch_copy}</span></td>
+          <td><button class="primary" style="padding:5px 9px; font-size:0.78rem;" onclick="downloadArtifact('${d.file_name}')">Download</button></td>
+        </tr>
+      `).join("");
+
+      document.getElementById("backtests").innerHTML = data.backtests.map(b => `
+        <tr>
+          <td><strong>${b.strategy_name}</strong><br/><span class="sub">${b.symbol}</span></td>
+          <td>Return: <strong>${b.net_return_pct}%</strong> | Win: ${b.win_rate_pct}%<br/>MaxDD: ${b.max_drawdown_pct}% | Sharpe: ${b.sharpe_ratio}</td>
+          <td><span class="badge ${b.verdict}">${b.verdict}</span></td>
         </tr>
       `).join("");
 
@@ -236,13 +264,6 @@
           <td>₹${l.total_capital_after.toFixed(2)}</td>
           <td>${l.description}</td>
         </tr>
-      `).join("");
-
-      document.getElementById("audits").innerHTML = data.audit_logs.map(g => `
-        <div style="padding:6px 0; border-bottom:1px solid var(--border); font-size:0.82rem;">
-          <strong>[${g.actor}]</strong> ${g.details}
-          <div class="sub" style="font-size:0.74rem;">${g.action} • ${g.created_at || ""}</div>
-        </div>
       `).join("");
     }
 

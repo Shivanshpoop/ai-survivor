@@ -3,13 +3,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import verify_admin_token
 from app.core.config import settings
-from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage
+from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage, DeliverableArtifact, PaperBacktest
 from app.services.treasury_engine import (
     check_survival_condition,
     get_total_capital,
@@ -53,7 +54,7 @@ class RevenuePayload(BaseModel):
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "phase": "PHASE_2_3_MULTI_AGENT_INTELLIGENCE", "paper_mode_only": settings.PAPER_MODE_ONLY}
+    return {"status": "ok", "phase": "PHASE_4_5_EXECUTION_AND_FINANCE", "paper_mode_only": settings.PAPER_MODE_ONLY}
 
 @router.get("/api/state", dependencies=[Depends(verify_admin_token)])
 def get_system_state(db: Session = Depends(get_db)):
@@ -62,17 +63,23 @@ def get_system_state(db: Session = Depends(get_db)):
     agent_held = get_active_agent_balances(db)
     spendable = max(0.0, round(state.treasury_balance - state.emergency_reserve, 2))
 
+    cycles = max(1, state.cycle_count or 1)
+    avg_burn = round(state.total_expenses / cycles, 2)
+    runway_cycles = int(total_cap / avg_burn) if avg_burn > 0 else 999
+
     risk_level = "LOW"
     if state.survival_status == "DESTROYED" or total_cap <= state.emergency_reserve:
         risk_level = "CRITICAL"
-    elif total_cap < state.initial_capital * 0.65:
+    elif total_cap < state.initial_capital * 0.65 or runway_cycles < 25:
         risk_level = "ELEVATED"
 
     agents = db.query(Agent).order_by(Agent.created_at.desc()).all()
     ledger = db.query(LedgerEntry).order_by(LedgerEntry.created_at.desc()).limit(40).all()
-    opportunities = db.query(Opportunity).order_by(Opportunity.created_at.desc()).limit(20).all()
+    opportunities = db.query(Opportunity).order_by(Opportunity.created_at.desc()).limit(15).all()
+    artifacts = db.query(DeliverableArtifact).order_by(DeliverableArtifact.created_at.desc()).limit(20).all()
+    backtests = db.query(PaperBacktest).order_by(PaperBacktest.created_at.desc()).limit(15).all()
     messages = db.query(AgentMessage).order_by(AgentMessage.id.desc()).limit(30).all()
-    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(30).all()
+    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(25).all()
 
     return {
         "treasury": {
@@ -89,6 +96,8 @@ def get_system_state(db: Session = Depends(get_db)):
             "total_expenses": state.total_expenses,
             "net_real_pnl": round(state.total_real_revenue - state.total_expenses, 2),
             "simulated_paper_pnl": state.simulated_paper_pnl,
+            "avg_burn_per_cycle": avg_burn,
+            "runway_cycles": runway_cycles,
             "risk_level": risk_level,
             "destruction_reason": state.destruction_reason,
         },
@@ -109,6 +118,31 @@ def get_system_state(db: Session = Depends(get_db)):
                 "status": a.status,
             }
             for a in agents
+        ],
+        "artifacts": [
+            {
+                "id": d.id,
+                "agent_name": d.agent_name,
+                "title": d.title,
+                "artifact_type": d.artifact_type,
+                "file_name": d.file_name,
+                "suggested_price_inr": d.suggested_price_inr,
+                "pitch_copy": d.pitch_copy,
+            }
+            for d in artifacts
+        ],
+        "backtests": [
+            {
+                "id": b.id,
+                "strategy_name": b.strategy_name,
+                "symbol": b.symbol,
+                "net_return_pct": b.net_return_pct,
+                "win_rate_pct": b.win_rate_pct,
+                "max_drawdown_pct": b.max_drawdown_pct,
+                "sharpe_ratio": b.sharpe_ratio,
+                "verdict": b.verdict,
+            }
+            for b in backtests
         ],
         "opportunities": [
             {
@@ -133,7 +167,6 @@ def get_system_state(db: Session = Depends(get_db)):
                 "recipient": m.recipient,
                 "message_type": m.message_type,
                 "content": m.content,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in messages
         ],
@@ -147,7 +180,6 @@ def get_system_state(db: Session = Depends(get_db)):
                 "treasury_after": l.treasury_after,
                 "total_capital_after": l.total_capital_after,
                 "description": l.description,
-                "created_at": l.created_at.isoformat() if l.created_at else None,
             }
             for l in ledger
         ],
@@ -162,6 +194,14 @@ def get_system_state(db: Session = Depends(get_db)):
             for g in audits
         ],
     }
+
+@router.get("/api/artifacts/download/{file_name}", dependencies=[Depends(verify_admin_token)])
+def download_artifact(file_name: str):
+    safe_name = Path(file_name).name
+    target = Path("artifacts") / safe_name
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Artifact file not found.")
+    return FileResponse(target, filename=safe_name)
 
 @router.post("/api/cycle/run", dependencies=[Depends(verify_admin_token)])
 async def run_cycle(db: Session = Depends(get_db)):
@@ -245,6 +285,6 @@ def backup_db():
         raise HTTPException(status_code=404, detail="Database file not found yet.")
     Path("backups").mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = Path("backups") / f"ai_survivor_p2_{ts}.db"
+    dest = Path("backups") / f"ai_survivor_p4_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
