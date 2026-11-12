@@ -20,6 +20,10 @@ async def register_telegram_commands_and_webhook():
     token, chat_id = _bot_creds()
     if not token:
         return {"ok": False, "reason": "TELEGRAM_BOT_TOKEN missing"}
+    if not settings.TELEGRAM_WEBHOOK_SECRET.strip():
+        return {"ok": False, "reason": "TELEGRAM_WEBHOOK_SECRET missing"}
+    if not chat_id:
+        return {"ok": False, "reason": "TELEGRAM_CHAT_ID missing"}
     base = f"https://api.telegram.org/bot{token}"
     commands = [
         {"command": "start", "description": "Open Control Menu & Live Status"},
@@ -35,7 +39,7 @@ async def register_telegram_commands_and_webhook():
             r1 = await client.post(f"{base}/setMyCommands", json={"commands": commands})
             results["commands"] = r1.json()
             webhook_url = f"{settings.PUBLIC_STORE_URL.rstrip('/')}/api/telegram/webhook"
-            r2 = await client.post(f"{base}/setWebhook", json={"url": webhook_url, "drop_pending_updates": True})
+            r2 = await client.post(f"{base}/setWebhook", json={"url": webhook_url, "secret_token": settings.TELEGRAM_WEBHOOK_SECRET.strip(), "drop_pending_updates": True})
             results["webhook"] = r2.json()
             if chat_id:
                 r3 = await client.post(f"{base}/sendMessage", json={
