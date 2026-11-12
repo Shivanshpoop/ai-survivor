@@ -1,21 +1,19 @@
-# AI SURVIVOR — Phase 1: Core Engine
+# NovaCraft Studio — Multi-Agent Business & Treasury Simulator
 
-## Included in Phase 1
-- Central Treasury initialized at **₹5,000.00** with a protected 20% (**₹1,000.00**) Emergency Reserve.
-- Double-entry immutable `LedgerEntry` table with `idempotency_key` duplicate protection.
-- Agent Registry with isolated per-agent wallets, 30% single-agent concentration cap, and fund recall upon suspension.
-- Real-time Survival Monitor that permanently transitions the system to `DESTROYED` if total capital reaches `₹0`.
-- Strict isolation between simulated paper returns and verified real cash.
-- Bearer token (`ADMIN_TOKEN`) authentication and one-click SQLite database backup.
+An experimental multi-agent orchestration engine built with **FastAPI**, **SQLAlchemy**, and **LLM APIs** that simulates autonomous opportunity discovery, capital allocation, digital product generation, and risk-gated paper backtesting.
 
-## Windows PowerShell Setup
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+## Features
+- **Multi-Agent Swarm (pp/agents/):** Coordinates specialized agents for market research, digital tool creation, content generation, and risk management.
+- **Treasury & Survival Engine (pp/services/treasury_engine.py):** Tracks virtual capital, emergency reserve guardrails, and ROI performance.
+- **Interactive Storefront & Control Dashboard (static/):** Showcases generated browser tools alongside an operator telemetry dashboard.
+
+## Quick Start
+`ash
 pip install -r requirements.txt
-Copy-Item .env.example .env
-# Edit .env and set a strong ADMIN_TOKEN
-python test_phase1.py
 uvicorn app.main:app --reload
-```
-Open `http://127.0.0.1:8000` in your browser and connect with your `ADMIN_TOKEN`.
+`
+- **Storefront Demo:** http://127.0.0.1:8000/
+- **Control Dashboard:** http://127.0.0.1:8000/ops-control-98765
+
+## Disclaimer
+Intended strictly for educational, architectural, and sandbox simulation purposes.

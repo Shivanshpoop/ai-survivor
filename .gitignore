@@ -1,8 +1,12 @@
-__pycache__/
-*.py[cod]
+.env
 *.db
 *.sqlite3
-.env
+__pycache__/
 .venv/
 venv/
+browser_profile/
+chrome_human_profile/
+worker_outbox/
+ready_videos/
+artifacts/
 backups/
