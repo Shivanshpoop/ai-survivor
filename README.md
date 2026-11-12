@@ -135,7 +135,7 @@ uvicorn app.main:app --reload
 - Public storefront: http://127.0.0.1:8000/
 - Store catalogue API: http://127.0.0.1:8000/api/store/catalog
 - Health check: http://127.0.0.1:8000/health
-- Operator dashboard: the path configured by `HIDDEN_ADMIN_PATH` (default: `/ops-control-98765`)
+- Operator dashboard: the path configured by `HIDDEN_ADMIN_PATH` (default: `/ops-control-change-this`)
 
 The operator dashboard path is an obscurity feature, **not authentication**. Protect the deployment at the network/application layer and use the bearer token for protected API routes.
 
