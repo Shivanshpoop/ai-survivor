@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = ""
     AUTO_CYCLE_INTERVAL_SECONDS: int = 300
 
-    PAYMENT_WEBHOOK_SECRET: str = "survivor-pay-secret-2026"
+    FAMPAY_UPI_ID: str = "yourname@fam"
+    FAMPAY_PAYEE_NAME: str = "AI Survivor Store"
     PUBLIC_STORE_URL: str = "https://ai-survivor.onrender.com/store"
 
     class Config:

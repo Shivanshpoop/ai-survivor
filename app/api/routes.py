@@ -1,9 +1,10 @@
 ﻿import shutil
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -55,13 +56,10 @@ class RevenuePayload(BaseModel):
     verified_real_cash: bool = False
     idempotency_key: Optional[str] = None
 
-class PaymentLinkPayload(BaseModel):
-    payment_link: str
-
-class PublicCheckoutPayload(BaseModel):
+class UpiClaimPayload(BaseModel):
     artifact_id: str
-    buyer_email: str
-    payment_ref: str
+    buyer_email: str = Field(..., min_length=5)
+    utr_number: str = Field(..., min_length=6, max_length=40)
 
 @router.get("/store")
 def public_store_page():
@@ -75,6 +73,13 @@ def get_public_catalog(db: Session = Depends(get_db)):
     for d in items:
         if d.file_name not in seen_slugs:
             seen_slugs.add(d.file_name)
+            upi_uri = (
+                f"upi://pay?pa={urllib.parse.quote(settings.FAMPAY_UPI_ID)}"
+                f"&pn={urllib.parse.quote(settings.FAMPAY_PAYEE_NAME)}"
+                f"&am={d.suggested_price_inr:.2f}&cu=INR"
+                f"&tn={urllib.parse.quote(d.file_name[:25])}"
+            )
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(upi_uri)}"
             unique_items.append({
                 "id": d.id,
                 "title": d.title,
@@ -82,104 +87,139 @@ def get_public_catalog(db: Session = Depends(get_db)):
                 "file_name": d.file_name,
                 "price_inr": d.suggested_price_inr,
                 "pitch_copy": d.pitch_copy,
-                "payment_link": d.payment_link or "",
+                "upi_id": settings.FAMPAY_UPI_ID,
+                "upi_uri": upi_uri,
+                "qr_url": qr_url,
                 "units_sold": d.units_sold or 0,
                 "built_by": d.agent_name,
             })
-    return {"store_name": "AI SURVIVOR Digital Tools & Automation Store", "products": unique_items}
+    return {
+        "store_name": "AI SURVIVOR Digital Tools Store",
+        "upi_id": settings.FAMPAY_UPI_ID,
+        "products": unique_items,
+    }
 
-@router.post("/api/artifacts/{artifact_id}/payment-link", dependencies=[Depends(verify_admin_token)])
-def set_artifact_payment_link(artifact_id: str, payload: PaymentLinkPayload, db: Session = Depends(get_db)):
-    art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == artifact_id).first()
-    if not art:
-        raise HTTPException(status_code=404, detail="Artifact not found")
-    art.payment_link = payload.payment_link.strip()
-    db.commit()
-    return {"id": art.id, "payment_link": art.payment_link}
-
-@router.post("/api/payments/webhook")
-async def automated_payment_webhook(
-    payload: PublicCheckoutPayload,
-    x_webhook_secret: Optional[str] = Header(default=None),
-    db: Session = Depends(get_db),
-):
-    if x_webhook_secret != settings.PAYMENT_WEBHOOK_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid payment webhook secret")
-
-    existing = db.query(RealOrder).filter(RealOrder.payment_ref == payload.payment_ref.strip()).first()
+@router.post("/api/store/claim-upi")
+async def claim_fampay_upi_order(payload: UpiClaimPayload, db: Session = Depends(get_db)):
+    utr = payload.utr_number.strip().upper()
+    existing = db.query(RealOrder).filter(RealOrder.payment_ref == utr).first()
     if existing:
         return {
-            "status": "ALREADY_FULFILLED",
             "order_id": existing.id,
-            "download_url": f"/api/store/fulfill/{existing.download_token}",
+            "status": existing.status,
+            "download_url": f"/api/store/fulfill/{existing.download_token}" if existing.status == "PAID_DELIVERED" else "",
         }
 
     art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == payload.artifact_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    agent = db.query(Agent).filter(Agent.id == art.agent_id).first()
+    order = RealOrder(
+        payment_ref=utr,
+        artifact_id=art.id,
+        buyer_email=payload.buyer_email.strip(),
+        amount_inr=art.suggested_price_inr,
+        status="PENDING_UPI_VERIFY",
+    )
+    db.add(order)
+    write_audit(db, "STOREFRONT_UPI", "UPI_CLAIM_SUBMITTED", f"Order {order.id}: UTR {utr} for {art.file_name} (INR {art.suggested_price_inr:.2f})")
+    db.commit()
+    db.refresh(order)
+
+    approve_url = f"https://ai-survivor.onrender.com/api/orders/{order.id}/approve-upi?token={urllib.parse.quote(settings.ADMIN_TOKEN)}"
+    await send_telegram_alert(
+        f"🔔 NEW FAMPAY UPI PAYMENT CLAIM!\n"
+        f"Order: {order.id}\n"
+        f"Product: {art.file_name}\n"
+        f"Amount: ₹{art.suggested_price_inr:.2f}\n"
+        f"UTR Ref: {utr}\n"
+        f"Buyer: {order.buyer_email}\n\n"
+        f"Check FamPay app & tap to approve + unlock download:\n{approve_url}"
+    )
+
+    return {
+        "order_id": order.id,
+        "status": order.status,
+        "message": "UTR submitted! Check status below — download unlocks immediately once verified.",
+    }
+
+@router.get("/api/store/order-status/{order_id}")
+def check_order_status(order_id: str, db: Session = Depends(get_db)):
+    order = db.query(RealOrder).filter(RealOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {
+        "order_id": order.id,
+        "status": order.status,
+        "download_url": f"/api/store/fulfill/{order.download_token}" if order.status == "PAID_DELIVERED" else "",
+    }
+
+@router.get("/api/orders/{order_id}/approve-upi")
+async def approve_upi_order_via_link(order_id: str, token: str = Query(...), db: Session = Depends(get_db)):
+    if token != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized approval token")
+
+    order = db.query(RealOrder).filter(RealOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status == "PAID_DELIVERED":
+        return HTMLResponse(f"<h2>Already Approved!</h2><p>Order {order.id} is already credited and unlocked for buyer.</p>")
+
+    art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == order.artifact_id).first()
+    agent = db.query(Agent).filter(Agent.id == (art.agent_id if art else "")).first() or db.query(Agent).filter(Agent.status == "ACTIVE").first()
     if not agent:
-        agent = db.query(Agent).filter(Agent.status == "ACTIVE").first()
-    if not agent:
-        raise HTTPException(status_code=400, detail="No active agent available to credit revenue")
+        raise HTTPException(status_code=400, detail="No active agent found")
 
     entry = record_revenue(
         db=db,
         agent_id=agent.id,
-        amount=art.suggested_price_inr,
-        description=f"REAL SALE [{payload.payment_ref}] {art.file_name} -> {payload.buyer_email}",
+        amount=order.amount_inr,
+        description=f"FAMPAY VERIFIED [{order.payment_ref}] {art.file_name if art else order.artifact_id} -> {order.buyer_email}",
         verified_real_cash=True,
-        idempotency_key=f"PAY-{payload.payment_ref.strip()}",
+        idempotency_key=f"UPI-{order.payment_ref}",
     )
 
-    art.units_sold = (art.units_sold or 0) + 1
-    order = RealOrder(
-        payment_ref=payload.payment_ref.strip(),
-        artifact_id=art.id,
-        buyer_email=payload.buyer_email.strip(),
-        amount_inr=art.suggested_price_inr,
-    )
-    db.add(order)
-    write_audit(db, "PAYMENT_GATEWAY", "REAL_SALE_FULFILLED", f"Order {order.id}: +INR {art.suggested_price_inr:.2f} for {art.file_name}")
+    if art:
+        art.units_sold = (art.units_sold or 0) + 1
+    order.status = "PAID_DELIVERED"
+    write_audit(db, "FAMPAY_VERIFIER", "UPI_ORDER_APPROVED", f"Order {order.id} approved: +INR {order.amount_inr:.2f}")
     db.commit()
-    db.refresh(order)
 
     await send_telegram_alert(
-        f"💰 REAL CUSTOMER SALE RECEIVED!\n"
-        f"Product: {art.file_name}\n"
-        f"Amount: +₹{art.suggested_price_inr:.2f}\n"
-        f"Buyer: {order.buyer_email}\n"
+        f"💰 FAMPAY SALE CREDITED TO TREASURY!\n"
+        f"Order: {order.id} | UTR: {order.payment_ref}\n"
+        f"Added: +₹{order.amount_inr:.2f}\n"
         f"New Total Capital: ₹{entry.total_capital_after:.2f}"
     )
 
-    return {
-        "status": "FULFILLED",
-        "order_id": order.id,
-        "download_url": f"/api/store/fulfill/{order.download_token}",
-        "total_capital": entry.total_capital_after,
-    }
+    return HTMLResponse(
+        f"<div style='font-family:sans-serif;padding:30px;background:#0b0f17;color:#10b981;'>"
+        f"<h1>✅ FamPay Payment Approved!</h1>"
+        f"<p style='color:#e6edf7;'>Order <b>{order.id}</b> (+₹{order.amount_inr:.2f}) added to Central Treasury.<br/>"
+        f"New Total Capital: <b>₹{entry.total_capital_after:.2f}</b>. Buyer download is now unlocked.</p></div>"
+    )
 
 @router.get("/api/store/fulfill/{download_token}")
 def fulfill_paid_order(download_token: str, db: Session = Depends(get_db)):
     order = db.query(RealOrder).filter(RealOrder.download_token == download_token).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Invalid or expired download token")
+    if not order or order.status != "PAID_DELIVERED":
+        raise HTTPException(status_code=403, detail="Payment pending verification")
     art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == order.artifact_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Product file missing")
     target = Path("artifacts") / Path(art.file_name).name
     if not target.exists():
-        raise HTTPException(status_code=404, detail="File regenerated on next cycle; contact support with Order ID " + order.id)
+        raise HTTPException(status_code=404, detail="File missing on disk; run 1 cycle in admin.")
     return FileResponse(target, filename=art.file_name)
 
 @router.get("/health")
 def health():
     return {
         "status": "ok",
-        "phase": "REAL_PRODUCTION_STORE_AND_WEBHOOK",
+        "phase": "FAMPAY_UPI_REAL_STORE",
+        "fampay_upi_configured": settings.FAMPAY_UPI_ID != "yourname@fam",
         "auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"],
-        "paper_mode_only": settings.PAPER_MODE_ONLY,
     }
 
 @router.post("/api/autonomy/toggle", dependencies=[Depends(verify_admin_token)])
@@ -463,6 +503,6 @@ def backup_db():
         raise HTTPException(status_code=404, detail="Database file not found yet.")
     Path("backups").mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = Path("backups") / f"ai_survivor_real_{ts}.db"
+    dest = Path("backups") / f"ai_survivor_fampay_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
