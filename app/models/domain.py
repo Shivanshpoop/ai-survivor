@@ -124,3 +124,14 @@ class AuditLog(Base):
     action = Column(String, nullable=False)
     details = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
+
+class WorkerTask(Base):
+    __tablename__ = 'worker_tasks'
+    id = Column(String, primary_key=True, default=lambda: 'TSK-' + uuid.uuid4().hex[:7].upper())
+    task_type = Column(String, nullable=False)
+    target_url = Column(String, default='')
+    subject = Column(String, nullable=False)
+    payload_text = Column(Text, nullable=False)
+    status = Column(String, default='PENDING')
+    result_note = Column(Text, default='')
+    created_at = Column(DateTime, default=utcnow)
