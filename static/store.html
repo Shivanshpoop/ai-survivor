@@ -3,77 +3,112 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI SURVIVOR — Digital Tools Store (Pay via UPI)</title>
+  <title>NovaCraft Studio — Digital Tools, Custom Merch & Automation Services</title>
   <style>
-    :root { --bg:#090d16; --card:#121927; --border:#24324a; --text:#f1f5f9; --muted:#94a3b8; --green:#10b981; --blue:#3b82f6; }
+    :root { --bg:#f8fafc; --card:#ffffff; --border:#e2e8f0; --text:#0f172a; --muted:#475569; --accent:#059669; --brand:#2563eb; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 26px 16px; }
-    .wrap { max-width: 1050px; margin: 0 auto; }
-    header { text-align: center; margin-bottom: 28px; }
-    h1 { font-size: 1.9rem; margin-bottom: 8px; }
-    p.lead { color: var(--muted); font-size: 0.98rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; }
-    .tag { display: inline-block; background: rgba(59,130,246,0.18); color: var(--blue); font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; margin-bottom: 10px; }
-    .title { font-size: 1.08rem; font-weight: 700; margin-bottom: 8px; }
-    .pitch { color: var(--muted); font-size: 0.88rem; line-height: 1.45; margin-bottom: 16px; }
-    .price-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
-    .price { font-size: 1.4rem; font-weight: 800; color: var(--green); }
-    .btn { background: var(--green); color: #042117; border: none; padding: 9px 15px; border-radius: 7px; font-weight: 700; cursor: pointer; font-size: 0.88rem; }
-    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); align-items:center; justify-content:center; padding:16px; }
-    .modal-box { background:var(--card); border:1px solid var(--border); border-radius:14px; max-width:410px; width:100%; padding:22px; text-align:center; }
-    input { width:100%; background:#0b0f17; color:var(--text); border:1px solid var(--border); padding:10px; border-radius:7px; margin-top:10px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    nav { background:#fff; border-bottom:1px solid var(--border); padding:16px 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .logo { font-weight:800; font-size:1.25rem; color:var(--brand); letter-spacing:-0.5px; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 18px; }
+    .hero { text-align:center; margin-bottom:32px; }
+    .hero h1 { font-size:2.05rem; margin-bottom:10px; }
+    .hero p { color:var(--muted); max-width:650px; margin:0 auto 18px; }
+    .tabs { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+    .tab { background:#fff; border:1px solid var(--border); padding:8px 16px; border-radius:999px; cursor:pointer; font-weight:600; font-size:0.88rem; }
+    .tab.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 2px 8px rgba(15,23,42,0.04); }
+    .tag { display: inline-block; background: #eff6ff; color: var(--brand); font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px; }
+    .title { font-size: 1.12rem; font-weight: 700; margin-bottom: 8px; }
+    .pitch { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
+    .price-row { display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border); }
+    .price { font-size: 1.45rem; font-weight: 800; color: var(--accent); }
+    .btn { background: var(--accent); color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.9rem; text-decoration: none; display: inline-block; }
+    .modal { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); align-items:center; justify-content:center; padding:16px; z-index:50; }
+    .modal-box { background:#fff; border-radius:16px; max-width:420px; width:100%; padding:24px; text-align:center; box-shadow:0 12px 30px rgba(0,0,0,0.2); }
+    input, textarea { width:100%; background:#f8fafc; color:var(--text); border:1px solid var(--border); padding:10px; border-radius:8px; margin-top:10px; font-family:inherit; }
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:0.84rem; border-top:1px solid var(--border); margin-top:40px; }
   </style>
 </head>
 <body>
+  <nav>
+    <div class="logo">NovaCraft Studio</div>
+    <div style="font-size:0.86rem; color:var(--muted);" id="navSupport">Verified UPI Checkout • Instant Digital & Pan-India Merch Delivery</div>
+  </nav>
+
   <div class="wrap">
-    <header>
-      <h1>⚡ AI SURVIVOR Digital Tools Store</h1>
-      <p class="lead">Production Python automation tools & business kits built by AI agents. Pay via any UPI app (FamPay / GPay / PhonePe).</p>
-    </header>
-    <div class="grid" id="catalog">Loading products...</div>
+    <div class="hero">
+      <h1>Smart Tools, Custom Merch & Digital Services</h1>
+      <p>Instant-download productivity web apps, minimalist creator apparel & mugs, and done-for-you automation services.</p>
+      <div class="tabs">
+        <button class="tab active" onclick="filterCat('ALL', this)">All Products</button>
+        <button class="tab" onclick="filterCat('DIGITAL_TOOL', this)">Digital Web Tools</button>
+        <button class="tab" onclick="filterCat('MERCH_POD', this)">Clothes & Mugs</button>
+        <button class="tab" onclick="filterCat('AGENCY_SERVICE', this)">Services</button>
+      </div>
+    </div>
+    <div class="grid" id="catalog">Loading store catalog...</div>
   </div>
+
+  <footer id="footerNote">© 2026 NovaCraft Studio • 100% Verified Fulfillment</footer>
 
   <div class="modal" id="payModal">
     <div class="modal-box">
-      <h3 id="mTitle" style="margin-bottom:6px;"></h3>
-      <div id="mPrice" style="color:var(--green); font-size:1.3rem; font-weight:800; margin-bottom:10px;"></div>
-      <img id="mQr" src="" alt="UPI QR" style="width:190px; height:190px; border-radius:8px; background:#fff; padding:6px;" />
-      <div style="margin-top:8px; font-size:0.85rem;">UPI ID: <strong id="mUpi"></strong></div>
-      <a id="mDeepLink" href="#" style="display:inline-block; margin-top:8px; color:var(--blue); font-size:0.84rem;">Open UPI App on Mobile →</a>
-      <input type="email" id="buyerEmail" placeholder="Your Email (for receipt)" />
+      <h3 id="mTitle" style="margin-bottom:4px;"></h3>
+      <div id="mPrice" style="color:var(--accent); font-size:1.35rem; font-weight:800; margin-bottom:10px;"></div>
+      <img id="mQr" src="" alt="UPI QR" style="width:185px; height:185px; border-radius:8px; border:1px solid var(--border); padding:6px;" />
+      <div style="margin-top:8px; font-size:0.86rem;">Pay to UPI ID: <strong id="mUpi"></strong></div>
+      <a id="mDeepLink" href="#" style="display:inline-block; margin-top:6px; color:var(--brand); font-size:0.84rem; font-weight:600;">Pay via UPI App on Mobile →</a>
+      <input type="email" id="buyerEmail" placeholder="Your Email (for invoice & tracking)" />
+      <textarea id="shipAddr" rows="2" placeholder="Full Shipping Address with Pincode (Required for T-Shirts/Mugs)" style="display:none;"></textarea>
       <input type="text" id="utrInput" placeholder="Enter 12-digit UPI UTR / Ref Number" />
-      <button class="btn" style="width:100%; margin-top:12px;" onclick="submitUtr()">Verify Payment & Unlock File</button>
-      <div id="statusBox" style="margin-top:12px; font-size:0.85rem; color:#f59e0b;"></div>
+      <button class="btn" style="width:100%; margin-top:12px;" onclick="submitUtr()">Submit Payment & Confirm Order →</button>
+      <div id="statusBox" style="margin-top:12px; font-size:0.86rem; color:#d97706;"></div>
       <button onclick="closeModal()" style="margin-top:12px; background:transparent; color:var(--muted); border:none; cursor:pointer;">Close</button>
     </div>
   </div>
 
   <script>
+    let allProducts = [];
     let currentProduct = null;
     let pollTimer = null;
 
     async function loadStore() {
       const res = await fetch("/api/store/catalog");
       const data = await res.json();
+      allProducts = data.products || [];
+      if (data.business_email) {
+        document.getElementById("footerNote").textContent = `© 2026 NovaCraft Studio • Support: ${data.business_email}`;
+      }
+      renderCards(allProducts);
+    }
+
+    function filterCat(cat, btn) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      btn.classList.add("active");
+      renderCards(cat === "ALL" ? allProducts : allProducts.filter(p => p.artifact_type === cat));
+    }
+
+    function renderCards(list) {
       const box = document.getElementById("catalog");
-      if (!data.products || data.products.length === 0) {
-        box.innerHTML = "<p style='color:#94a3b8;'>New AI tools are compiling. Refresh in 30 seconds.</p>";
+      if (!list.length) {
+        box.innerHTML = "<p style='color:#64748b; text-align:center;'>New arrivals are being prepared. Check back shortly.</p>";
         return;
       }
-      box.innerHTML = data.products.map(p => `
+      box.innerHTML = list.map(p => `
         <div class="card">
           <div>
-            <span class="tag">${p.artifact_type}</span>
-            <div class="title">${p.file_name}</div>
+            <span class="tag">${p.artifact_type.replace("_", " ")}</span>
+            <div class="title">${p.title.replace(/\[C#\d+\]/g, "").trim()}</div>
             <div class="pitch">${p.pitch_copy}</div>
           </div>
           <div class="price-row">
             <div>
               <div class="price">₹${p.price_inr.toFixed(0)}</div>
-              <div style="font-size:0.75rem; color:#94a3b8;">By ${p.built_by} • Sold: ${p.units_sold}</div>
+              <div style="font-size:0.75rem; color:#64748b;">Verified Orders: ${p.units_sold}</div>
             </div>
-            <button class="btn" onclick='openPay(${JSON.stringify(p)})'>Pay via UPI →</button>
+            <button class="btn" onclick='openPay(${JSON.stringify(p)})'>Order Now →</button>
           </div>
         </div>
       `).join("");
@@ -81,12 +116,13 @@
 
     function openPay(p) {
       currentProduct = p;
-      document.getElementById("mTitle").textContent = p.file_name;
+      document.getElementById("mTitle").textContent = p.title.replace(/\[C#\d+\]/g, "").trim();
       document.getElementById("mPrice").textContent = "Pay ₹" + p.price_inr.toFixed(0);
       document.getElementById("mQr").src = p.qr_url;
       document.getElementById("mUpi").textContent = p.upi_id;
       document.getElementById("mDeepLink").href = p.upi_uri;
-      document.getElementById("statusBox").textContent = "";
+      document.getElementById("shipAddr").style.display = p.artifact_type === "MERCH_POD" ? "block" : "none";
+      document.getElementById("statusBox").innerHTML = "";
       document.getElementById("payModal").style.display = "flex";
     }
 
@@ -98,14 +134,19 @@
     async function submitUtr() {
       const email = document.getElementById("buyerEmail").value.trim();
       const utr = document.getElementById("utrInput").value.trim();
-      if (!email || utr.length < 6) {
-        alert("Please enter your email and valid UPI UTR reference number.");
+      const addr = document.getElementById("shipAddr").value.trim() || "Digital Delivery";
+      if (!email || utr.length < 10) {
+        alert("Please enter your email and valid 12-digit UPI UTR number.");
+        return;
+      }
+      if (currentProduct.artifact_type === "MERCH_POD" && addr.length < 10) {
+        alert("Please enter your full shipping address with pincode for merch delivery.");
         return;
       }
       const res = await fetch("/api/store/claim-upi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artifact_id: currentProduct.id, buyer_email: email, utr_number: utr })
+        body: JSON.stringify({ artifact_id: currentProduct.id, buyer_email: email, utr_number: utr, shipping_address: addr })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -113,16 +154,16 @@
         return;
       }
       if (data.download_url) {
-        document.getElementById("statusBox").innerHTML = `<a class="btn" href="${data.download_url}">⬇️ Download ${currentProduct.file_name}</a>`;
+        document.getElementById("statusBox").innerHTML = `<a class="btn" href="${data.download_url}">✅ Verified! Download / View Order Receipt</a>`;
         return;
       }
-      document.getElementById("statusBox").textContent = "⏳ Verifying UTR (" + data.order_id + ")... Keep this window open, download link will appear automatically.";
+      document.getElementById("statusBox").textContent = "⏳ Verifying UPI UTR (" + data.order_id + ")... Keep this tab open, download/receipt unlocks automatically once confirmed.";
       pollTimer = setInterval(async () => {
         const st = await fetch(`/api/store/order-status/${data.order_id}`);
         const sdata = await st.json();
         if (sdata.status === "PAID_DELIVERED" && sdata.download_url) {
           clearInterval(pollTimer);
-          document.getElementById("statusBox").innerHTML = `<a class="btn" href="${sdata.download_url}">✅ Verified! Download ${currentProduct.file_name}</a>`;
+          document.getElementById("statusBox").innerHTML = `<a class="btn" href="${sdata.download_url}">✅ Confirmed! Download / View Receipt</a>`;
         }
       }, 4000);
     }
