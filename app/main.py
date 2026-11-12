@@ -17,7 +17,7 @@ async def autonomous_background_loop():
     await asyncio.sleep(4)
     await register_telegram_commands_and_webhook()
     while True:
-        await asyncio.sleep(30)
+        await asyncio.sleep(max(1, settings.AUTO_CYCLE_INTERVAL_SECONDS))
         db = SessionLocal()
         try:
             state = check_survival_condition(db)
@@ -36,7 +36,7 @@ async def autonomous_background_loop():
             heartbeat = (
                 f"🟢 NOVACRAFT 30s LIVE PULSE ({now_ist})\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"• Status: {state.survival_status} | Loop: {'ON (30s)' if AUTONOMY_STATE.get('auto_run_enabled') else 'PAUSED'}\n"
+                f"• Status: {state.survival_status} | Loop: {'ON (' + str(settings.AUTO_CYCLE_INTERVAL_SECONDS) + 's)' if AUTONOMY_STATE.get('auto_run_enabled') else 'PAUSED'}\n"
                 f"• Total Capital: ₹{total_cap:.2f}\n"
                 f"• Treasury Cash: ₹{state.treasury_balance:.2f} (Reserve: ₹{state.emergency_reserve:.2f})\n"
                 f"• Real Revenue: +₹{state.total_real_revenue:.2f} | Cycles: {state.cycle_count}\n"

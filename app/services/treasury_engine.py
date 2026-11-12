@@ -151,6 +151,9 @@ def allocate_funds_to_agent(
     agent.allocated_budget = round(agent.allocated_budget + amount, 2)
     agent.current_balance = round(agent.current_balance + amount, 2)
 
+    # SessionLocal disables autoflush; persist pending balance changes before
+    # aggregate SQL queries so the ledger snapshot reflects the same transaction.
+    db.flush()
     total_cap = get_total_capital(db, state)
     entry = LedgerEntry(
         idempotency_key=idempotency_key,
@@ -198,6 +201,8 @@ def record_expense(
     agent.expenses = round(agent.expenses + amount, 2)
     state.total_expenses = round(state.total_expenses + amount, 2)
 
+    # Ensure the aggregate balance query sees the agent's reduced cash balance.
+    db.flush()
     total_cap = get_total_capital(db, state)
     entry = LedgerEntry(
         idempotency_key=idempotency_key,
@@ -287,6 +292,7 @@ def suspend_and_recall(db: Session, agent_id: str, reason: str) -> Agent:
     if recalled > 0:
         agent.current_balance = 0.0
         state.treasury_balance = round(state.treasury_balance + recalled, 2)
+        db.flush()
         total_cap = get_total_capital(db, state)
         db.add(LedgerEntry(
             entry_type="RECALL",
