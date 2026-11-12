@@ -10,163 +10,76 @@ from app.core.config import settings
 ARTIFACTS_DIR = Path("artifacts")
 ARTIFACTS_DIR.mkdir(exist_ok=True)
 
-PRODUCT_CATALOG = [
+WEB_APP_CATALOG = [
     {
-        "slug": "gst_tally_reconciler",
-        "ext": "py",
-        "type": "PYTHON_AUTOMATION_SCRIPT",
-        "price": 499.0,
-        "pitch": "GSTIN & Invoice CSV deduplicator for CAs & Indian SMBs. Eliminates GSTR-2B mismatches in 2 seconds.",
-        "code": '''import csv, sys
-
-def reconcile_gst(in_csv, out_csv):
-    seen, rows = set(), []
-    with open(in_csv, encoding="utf-8-sig") as f:
-        for r in csv.DictReader(f):
-            key = ((r.get("InvoiceNo") or "").strip().upper(), (r.get("GSTIN") or "").strip().upper())
-            if key[0] and key not in seen:
-                seen.add(key)
-                rows.append(r)
-    if rows:
-        with open(out_csv, "w", newline="", encoding="utf-8") as out:
-            w = csv.DictWriter(out, fieldnames=rows[0].keys())
-            w.writeheader()
-            w.writerows(rows)
-    print(f"Reconciled {len(rows)} unique GST invoices -> {out_csv}")
-
-if __name__ == "__main__":
-    reconcile_gst(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py in.csv out.csv")
-'''
-    },
-    {
-        "slug": "whatsapp_lead_normalizer",
-        "ext": "py",
-        "type": "FREELANCE_DELIVERABLE_SCRIPT",
-        "price": 450.0,
-        "pitch": "+91 Indian phone normalizer & duplicate lead cleaner for Real Estate & Coaching agencies.",
-        "code": '''import csv, re, sys
-
-def norm(p):
-    d = re.sub(r"\\D", "", p or "")
-    return "+91" + d if len(d) == 10 else ("+" + d if len(d) == 12 and d.startswith("91") else "")
-
-def clean_leads(in_csv, out_csv):
-    seen, out_rows = set(), []
-    with open(in_csv, encoding="utf-8-sig") as f:
-        for r in csv.DictReader(f):
-            ph = norm(r.get("Phone", ""))
-            if ph and ph not in seen:
-                seen.add(ph)
-                r["Phone"] = ph
-                out_rows.append(r)
-    if out_rows:
-        with open(out_csv, "w", newline="", encoding="utf-8") as out:
-            w = csv.DictWriter(out, fieldnames=out_rows[0].keys())
-            w.writeheader()
-            w.writerows(out_rows)
-    print(f"Cleaned {len(out_rows)} valid +91 leads -> {out_csv}")
-
-if __name__ == "__main__":
-    clean_leads(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py raw.csv clean.csv")
-'''
-    },
-    {
-        "slug": "ecommerce_seller_profit_calculator",
-        "ext": "py",
-        "type": "PYTHON_MICRO_SAAS_CLI",
-        "price": 399.0,
-        "pitch": "Amazon/Flipkart/Meesho true net profit, GST & RTO loss calculator for D2C sellers.",
-        "code": '''def calc_margin(selling_price, cost_price, referral_pct=15.0, shipping=65.0, gst_pct=18.0, rto_pct=12.0):
-    commission = selling_price * (referral_pct / 100.0)
-    gst_on_fees = (commission + shipping) * (gst_pct / 100.0)
-    rto_cost = shipping * (rto_pct / 100.0)
-    net_profit = selling_price - cost_price - commission - shipping - gst_on_fees - rto_cost
-    return round(net_profit, 2), round((net_profit / selling_price) * 100, 1)
-
-if __name__ == "__main__":
-    sp = float(input("Selling Price (INR): "))
-    cp = float(input("Product Cost (INR): "))
-    profit, margin = calc_margin(sp, cp)
-    print(f"Net Profit: INR {profit} ({margin}% margin after fees, GST & RTO)")
-'''
-    },
-    {
-        "slug": "upi_bank_statement_categorizer",
-        "ext": "py",
-        "type": "FINTECH_UTILITY_SCRIPT",
-        "price": 599.0,
-        "pitch": "Auto-tags bank/UPI CSV statements into Food, Travel, SaaS, Rent & Tax buckets for ITR prep.",
-        "code": '''import csv, sys
-
-RULES = {"SWIGGY": "Food", "ZOMATO": "Food", "UBER": "Travel", "OLA": "Travel", "AWS": "Cloud/SaaS", "ZERODHA": "Investments"}
-
-def categorize(in_csv, out_csv):
-    rows = []
-    with open(in_csv, encoding="utf-8-sig") as f:
-        for r in csv.DictReader(f):
-            desc = (r.get("Description") or "").upper()
-            r["Category"] = next((v for k, v in RULES.items() if k in desc), "General")
-            rows.append(r)
-    if rows:
-        with open(out_csv, "w", newline="", encoding="utf-8") as out:
-            w = csv.DictWriter(out, fieldnames=rows[0].keys())
-            w.writeheader()
-            w.writerows(rows)
-    print(f"Categorized {len(rows)} bank entries -> {out_csv}")
-
-if __name__ == "__main__":
-    categorize(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py bank.csv tagged.csv")
-'''
-    },
-    {
-        "slug": "ats_resume_keyword_scorer",
-        "ext": "py",
-        "type": "CAREER_TECH_TOOL",
-        "price": 249.0,
-        "pitch": "Instant offline ATS keyword matcher & missing skill extractor for job seekers & students.",
-        "code": '''import re, sys
-from pathlib import Path
-
-def score_resume(resume_txt, jd_txt):
-    r_words = set(re.findall(r"[a-zA-Z]{3,}", Path(resume_txt).read_text(encoding="utf-8").lower()))
-    j_words = set(re.findall(r"[a-zA-Z]{3,}", Path(jd_txt).read_text(encoding="utf-8").lower()))
-    matched = r_words & j_words
-    missing = sorted(j_words - r_words)[:20]
-    pct = round((len(matched) / max(1, len(j_words))) * 100, 1)
-    print(f"ATS Match Score: {pct}%\\nTop Missing Keywords: {', '.join(missing)}")
-
-if __name__ == "__main__":
-    score_resume(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py resume.txt jd.txt")
-'''
-    },
-    {
-        "slug": "freelance_rfp_pricing_kit",
-        "ext": "md",
-        "type": "DIGITAL_PRODUCT_ASSET",
+        "slug": "gst_invoice_pdf_maker_app",
+        "ext": "html",
+        "type": "BROWSER_WEB_APP",
         "price": 299.0,
-        "pitch": "15 Indian agency RFP templates, scope-creep clauses & rate card for solo developers.",
-        "code": '''# Indian Freelance & Agency RFP + Scope-Creep Protection Kit
-## 1. Payment Milestone Structure
-- **50% Kickoff Advance** (Non-refundable once architecture starts)
-- **30% Staging Demo Sign-off**
-- **20% Final Source Code Handover**
-
-## 2. Scope-Creep Clause
-> Any feature, API integration, or UI revision outside the signed checklist is billed separately at ₹500/hour.
-'''
+        "pitch": "Instant GST Invoice & Bill Generator Web App (Works offline in browser, 1-click Print/PDF). ₹299.",
+        "code": """<!DOCTYPE html>
+<html><head><meta charset='UTF-8'><title>Instant GST Invoice Maker</title>
+<style>body{font-family:sans-serif;max-width:720px;margin:30px auto;padding:20px;background:#f8fafc}
+.box{background:#fff;padding:24px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+input{padding:8px;margin:5px 0;width:100%;box-sizing:border-box}button{background:#10b981;color:#fff;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;font-weight:bold;margin-top:10px}
+@media print{button,.no-print{display:none}}</style></head>
+<body><div class='box'><h2>TAX INVOICE</h2>
+<div class='no-print'><input id='biz' placeholder='Your Business Name & GSTIN'><input id='cust' placeholder='Client Name & GSTIN'>
+<input id='item' placeholder='Service / Product Description'><input id='amt' type='number' placeholder='Base Amount (INR)'>
+<input id='gst' type='number' value='18' placeholder='GST %'><button onclick='gen()'>Generate Invoice</button></div>
+<div id='out' style='margin-top:20px;border-top:2px solid #e2e8f0;padding-top:15px'></div>
+<button onclick='window.print()'>Print / Save as PDF</button></div>
+<script>function gen(){const b=biz.value,c=cust.value,i=item.value,a=+amt.value||0,g=+gst.value||0,tax=a*g/100;
+out.innerHTML=`<p><b>From:</b> ${b}</p><p><b>Bill To:</b> ${c}</p><p><b>Item:</b> ${i}</p><p>Base: ₹${a.toFixed(2)} | GST (${g}%): ₹${tax.toFixed(2)}</p><h3>Grand Total: ₹${(a+tax).toFixed(2)}</h3>`;}</script></body></html>"""
     },
+    {
+        "slug": "whatsapp_bulk_link_campaign_tool",
+        "ext": "html",
+        "type": "MARKETING_WEB_APP",
+        "price": 349.0,
+        "pitch": "Zero-ban WhatsApp Personalized Message Link Generator for Indian coaches & shops. ₹349.",
+        "code": """<!DOCTYPE html>
+<html><head><meta charset='UTF-8'><title>WhatsApp Campaign Link Generator</title>
+<style>body{font-family:sans-serif;max-width:760px;margin:30px auto;padding:20px;background:#0f172a;color:#f8fafc}
+textarea,input{width:100%;padding:10px;margin:8px 0;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#fff}
+button{background:#22c55e;color:#052e16;border:none;padding:10px 18px;border-radius:6px;font-weight:bold;cursor:pointer}
+a{color:#38bdf8;display:block;margin:6px 0}</style></head>
+<body><h2>⚡ WhatsApp Personalized Outreach Generator</h2>
+<textarea id='msg' rows='3' placeholder='Hi {name}, special 20% offer for you today!'></textarea>
+<textarea id='list' rows='5' placeholder='Rahul, 9876543210&#10;Priya, 9123456789'></textarea>
+<button onclick='build()'>Generate 1-Click Send Links</button><div id='res' style='margin-top:16px'></div>
+<script>function build(){res.innerHTML=list.value.split('\\n').filter(Boolean).map(l=>{const[n,p]=l.split(',');const ph=(p||'').replace(/\\D/g,'').slice(-10);const txt=encodeURIComponent(msg.value.replace('{name}',(n||'Friend').trim()));return ph.length===10?`<a target='_blank' href='https://wa.me/91${ph}?text=${txt}'>Send to ${n} (+91${ph}) →</a>`:''}).join('');}</script></body></html>"""
+    },
+    {
+        "slug": "freelance_quotation_roi_calculator",
+        "ext": "html",
+        "type": "AGENCY_WEB_TOOL",
+        "price": 249.0,
+        "pitch": "Interactive Project Pricing, Tax & Profit Margin Estimator Web App for freelancers. ₹249.",
+        "code": """<!DOCTYPE html>
+<html><head><meta charset='UTF-8'><title>Freelance Project Quote Calculator</title>
+<style>body{font-family:sans-serif;max-width:600px;margin:30px auto;padding:20px;background:#111827;color:#f9fafb}
+input{width:100%;padding:9px;margin:6px 0;background:#1f2937;color:#fff;border:1px solid #374151;border-radius:6px}
+button{background:#3b82f6;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-weight:bold;cursor:pointer;margin-top:8px}</style></head>
+<body><h2>💼 Freelance Project Quote & Margin Calculator</h2>
+<input id='hrs' type='number' placeholder='Estimated Hours (e.g. 20)'><input id='rate' type='number' placeholder='Your Hourly Rate INR (e.g. 600)'>
+<input id='buf' type='number' value='20' placeholder='Scope-Creep Buffer %'><button onclick='calc()'>Calculate Client Quote</button>
+<h3 id='out' style='margin-top:16px;color:#10b981'></h3>
+<script>function calc(){const base=(+hrs.value||0)*(+rate.value||0),total=base*(1+(+buf.value||0)/100);out.textContent=`Recommended Client Quote: ₹${total.toFixed(0)} (Includes ${buf.value}% buffer)`}</script></body></html>"""
+    }
 ]
 
 async def generate_llm_product(opp_title: str, price_inr: float) -> dict | None:
     if not settings.LLM_API_KEY:
         return None
     prompt = (
-        f"Build a complete, standalone, zero-dependency Python 3 script solving: '{opp_title}'. "
-        f"Return valid JSON with keys: slug (snake_case), type (PYTHON_TOOL), pitch (1-sentence commercial pitch in INR {price_inr}), "
-        f"code (complete working Python code with if __name__ == '__main__': block)."
+        f"Build a complete, polished, single-file HTML5+CSS+JS browser web app solving: '{opp_title}'. "
+        f"No external dependencies, clean modern dark/light UI, immediately usable by an Indian business owner or student without coding. "
+        f"Return valid JSON with keys: slug (snake_case), type (BROWSER_WEB_APP), pitch (1-sentence persuasive pitch in INR {price_inr}), "
+        f"code (complete valid <!DOCTYPE html> ... </html> string)."
     )
     try:
-        async with httpx.AsyncClient(timeout=18.0) as client:
+        async with httpx.AsyncClient(timeout=22.0) as client:
             resp = await client.post(
                 f"{settings.LLM_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {settings.LLM_API_KEY}"},
@@ -188,27 +101,27 @@ async def build_deliverable_artifact(db: Session, opp_id: str, opp_title: str, c
 
     llm_prod = await generate_llm_product(opp_title, price_inr)
     if llm_prod and llm_prod.get("code"):
-        slug = "".join(c if c.isalnum() or c == "_" else "_" for c in llm_prod.get("slug", "ai_tool").lower())[:32]
-        file_name = f"{slug}_{len(existing_files)+1}.py"
+        slug = "".join(c if c.isalnum() or c == "_" else "_" for c in llm_prod.get("slug", "web_tool").lower())[:32]
+        file_name = f"{slug}_{len(existing_files)+1}.html"
         (ARTIFACTS_DIR / file_name).write_text(llm_prod["code"], encoding="utf-8")
         art = DeliverableArtifact(
             opportunity_id=opp_id,
             agent_id=agent_id,
             agent_name=agent_name,
             title=opp_title,
-            artifact_type=llm_prod.get("type", "PYTHON_AUTOMATION_SCRIPT"),
+            artifact_type=llm_prod.get("type", "BROWSER_WEB_APP"),
             file_name=file_name,
             suggested_price_inr=price_inr,
-            pitch_copy=llm_prod.get("pitch", f"Commercial tool for {opp_title}"),
+            pitch_copy=llm_prod.get("pitch", f"Ready-to-use browser app for {opp_title}"),
         )
         db.add(art)
         db.commit()
         db.refresh(art)
         return art
 
-    chosen = next((p for p in PRODUCT_CATALOG if f"{p['slug']}.{p['ext']}" not in existing_files), None)
+    chosen = next((p for p in WEB_APP_CATALOG if f"{p['slug']}.{p['ext']}" not in existing_files), None)
     if not chosen:
-        chosen = random.choice(PRODUCT_CATALOG)
+        chosen = random.choice(WEB_APP_CATALOG)
         file_name = f"{chosen['slug']}_v{len(existing_files)+1}.{chosen['ext']}"
     else:
         file_name = f"{chosen['slug']}.{chosen['ext']}"
