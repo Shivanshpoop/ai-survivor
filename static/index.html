@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI SURVIVOR — Phase 4 & 5 Autonomous Business & Finance Engine</title>
+  <title>AI SURVIVOR — Autonomous Production Command Center</title>
   <style>
     :root {
       --bg: #0b0f17;
@@ -35,7 +35,7 @@
     }
     h1 { font-size: 1.35rem; }
     .sub { color: var(--muted); font-size: 0.85rem; }
-    input, button {
+    input, select, button {
       background: var(--panel);
       color: var(--text);
       border: 1px solid var(--border);
@@ -88,13 +88,14 @@
 <body>
   <header>
     <div>
-      <h1>AI SURVIVOR — Phase 4 & 5 Autonomous Business Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
-      <div class="sub">Real Product Deliverables • Paper Trading Backtests • Cash-Flow Runway Forecasting • Auto-Reinvestment</div>
+      <h1>AI SURVIVOR — Full Autonomous Production Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
+      <div class="sub">24/7 Autonomous Loop • Real Deliverable Artifacts • Paper Trading • Verified Real-Cash Revenue Gate</div>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <input type="password" id="tokenInput" placeholder="Paste ADMIN_TOKEN" />
       <button class="primary" onclick="connect()">Connect</button>
-      <button class="success" id="cycleBtn" onclick="runCycle()">⚡ Run Autonomous Cycle</button>
+      <button class="success" id="cycleBtn" onclick="runCycle()">⚡ Run 1 Cycle</button>
+      <button id="autoBtn" onclick="toggleAuto()">▶️ Start 24/7 Loop</button>
       <button onclick="backup()">Backup DB</button>
     </div>
   </header>
@@ -113,10 +114,20 @@
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:18px;">
+    <h2>Verified Real-Customer Revenue Gate (Converts Real Sales into Central Treasury Cash)</h2>
+    <div class="row">
+      <select id="revAgent"></select>
+      <input type="number" id="revAmount" placeholder="Sale Amount (INR)" style="width:160px;" />
+      <input type="text" id="revDesc" placeholder="Customer / Invoice / Gumroad / UPI Ref" style="flex:1; min-width:220px;" />
+      <button class="success" onclick="logVerifiedRevenue()">💰 Record Verified Real Sale</button>
+    </div>
+  </div>
+
   <div class="grid-2">
     <div class="card">
       <h2>Built Products & Freelance Deliverables (Downloadable)</h2>
-      <div style="max-height:310px; overflow-y:auto;">
+      <div style="max-height:300px; overflow-y:auto;">
         <table>
           <thead><tr><th>Deliverable</th><th>Price & Pitch</th><th>Download</th></tr></thead>
           <tbody id="artifacts"></tbody>
@@ -125,7 +136,7 @@
     </div>
     <div class="card">
       <h2>Paper Trading Strategy Backtests (Sandbox Only)</h2>
-      <div style="max-height:310px; overflow-y:auto;">
+      <div style="max-height:300px; overflow-y:auto;">
         <table>
           <thead><tr><th>Strategy</th><th>Metrics</th><th>Verdict</th></tr></thead>
           <tbody id="backtests"></tbody>
@@ -137,11 +148,11 @@
   <div class="grid-2">
     <div class="card">
       <h2>Supreme Manager & Inter-Agent Communications</h2>
-      <div style="max-height:290px; overflow-y:auto;" id="msgs"></div>
+      <div style="max-height:280px; overflow-y:auto;" id="msgs"></div>
     </div>
     <div class="card">
       <h2>Immutable Financial Ledger</h2>
-      <div style="max-height:290px; overflow-y:auto;">
+      <div style="max-height:280px; overflow-y:auto;">
         <table>
           <thead><tr><th>Type</th><th>Amount</th><th>Total Cap</th><th>Details</th></tr></thead>
           <tbody id="ledger"></tbody>
@@ -169,7 +180,7 @@
     async function downloadArtifact(fileName) {
       const res = await fetch(`/api/artifacts/download/${encodeURIComponent(fileName)}`, { headers: headers() });
       if (!res.ok) {
-        alert("Artifact file not found (note: Render free tier resets local disk on redeploy; run 1 cycle to generate fresh artifacts).");
+        alert("Artifact not found on disk (run 1 cycle to generate fresh files).");
         return;
       }
       const blob = await res.blob();
@@ -183,16 +194,17 @@
 
     async function refresh() {
       const res = await fetch("/api/state", { headers: headers() });
-      if (!res.ok) {
-        alert("Invalid ADMIN_TOKEN. Copy ADMIN_TOKEN and click Connect.");
-        return;
-      }
+      if (!res.ok) return;
       const data = await res.json();
       const t = data.treasury;
 
       const sb = document.getElementById("statusBadge");
       sb.textContent = t.survival_status;
       sb.className = "badge " + t.survival_status;
+
+      const autoBtn = document.getElementById("autoBtn");
+      autoBtn.textContent = t.auto_run_enabled ? "⏸️ Stop 24/7 Loop (RUNNING)" : "▶️ Start 24/7 Loop";
+      autoBtn.className = t.auto_run_enabled ? "danger" : "primary";
 
       document.getElementById("metrics").innerHTML = `
         <div class="card">
@@ -206,9 +218,9 @@
           <div class="sub">Spendable: ₹${t.spendable_treasury.toFixed(2)} | Reserve: ₹${t.emergency_reserve.toFixed(2)}</div>
         </div>
         <div class="card">
-          <div class="label">Expenses & Paper PnL</div>
-          <div class="val" style="color:var(--red);">-₹${t.total_expenses.toFixed(2)}</div>
-          <div class="sub">Paper PnL: +₹${t.simulated_paper_pnl.toFixed(2)} (Isolated)</div>
+          <div class="label">Real Revenue vs Expenses</div>
+          <div class="val" style="color:var(--green);">+₹${t.total_real_revenue.toFixed(2)}</div>
+          <div class="sub">Expenses: -₹${t.total_expenses.toFixed(2)} | Paper PnL: +₹${t.simulated_paper_pnl.toFixed(2)}</div>
         </div>
         <div class="card">
           <div class="label">Cash-Flow Runway & Risk</div>
@@ -216,6 +228,9 @@
           <div class="sub">Burn: ₹${t.avg_burn_per_cycle}/cycle | Agent Cash: ₹${t.agent_held_balance.toFixed(2)}</div>
         </div>
       `;
+
+      const activeAgents = data.agents.filter(a => a.status === "ACTIVE");
+      document.getElementById("revAgent").innerHTML = activeAgents.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join("");
 
       document.getElementById("agents").innerHTML = data.agents.map(a => `
         <div class="agent-box">
@@ -227,7 +242,7 @@
           <div style="font-size:0.81rem; margin-bottom:6px;">${a.mission}</div>
           <div style="font-size:0.80rem;">
             Balance: <strong>₹${a.current_balance.toFixed(2)}</strong> / ₹${a.allocated_budget.toFixed(2)}<br/>
-            Expenses: ₹${a.expenses.toFixed(2)} | Paper PnL: ₹${a.simulated_pnl.toFixed(2)}<br/>
+            Real Rev: ₹${a.revenue.toFixed(2)} | Exp: ₹${a.expenses.toFixed(2)} | Paper: ₹${a.simulated_pnl.toFixed(2)}<br/>
             Score: <strong>${a.performance_score}</strong>/100 | Tasks: ${a.tasks_completed}
           </div>
           ${a.status === "ACTIVE" ? `<button class="danger" style="margin-top:8px; padding:4px 8px; font-size:0.75rem;" onclick="suspend('${a.id}')">Suspend & Recall</button>` : ""}
@@ -270,14 +285,39 @@
     async function runCycle() {
       const btn = document.getElementById("cycleBtn");
       btn.disabled = true;
-      btn.textContent = "Running Cycle...";
+      btn.textContent = "Running...";
       try {
         const res = await fetch("/api/cycle/run", { method: "POST", headers: headers() });
         if (res.ok) await refresh();
-        else alert("Cycle failed. Check token or survival status.");
       } finally {
         btn.disabled = false;
-        btn.textContent = "⚡ Run Autonomous Cycle";
+        btn.textContent = "⚡ Run 1 Cycle";
+      }
+    }
+
+    async function toggleAuto() {
+      const res = await fetch("/api/autonomy/toggle", { method: "POST", headers: headers() });
+      if (res.ok) refresh();
+    }
+
+    async function logVerifiedRevenue() {
+      const res = await fetch("/api/ledger/revenue", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          agent_id: document.getElementById("revAgent").value,
+          amount: parseFloat(document.getElementById("revAmount").value || "0"),
+          description: document.getElementById("revDesc").value,
+          verified_real_cash: true
+        })
+      });
+      if (res.ok) {
+        document.getElementById("revAmount").value = "";
+        document.getElementById("revDesc").value = "";
+        refresh();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to record real revenue");
       }
     }
 
@@ -298,9 +338,6 @@
         document.getElementById("agMission").value = "";
         document.getElementById("agBudget").value = "";
         refresh();
-      } else {
-        const err = await res.json();
-        alert(err.detail || "Failed to create agent");
       }
     }
 
@@ -317,6 +354,7 @@
       }
     }
 
+    setInterval(() => { if (localStorage.getItem("ai_survivor_p1_token")) refresh(); }, 15000);
     if (localStorage.getItem("ai_survivor_p1_token")) refresh();
   </script>
 </body>

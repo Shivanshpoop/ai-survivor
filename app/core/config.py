@@ -1,7 +1,7 @@
 ﻿from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    APP_NAME: str = "AI SURVIVOR — Phase 2 & 3 Autonomous Engine"
+    APP_NAME: str = "AI SURVIVOR — Full Autonomous Production Engine"
     ENVIRONMENT: str = "production"
     DATABASE_URL: str = "sqlite:///./ai_survivor_p1.db"
     ADMIN_TOKEN: str = "change-me-to-a-strong-secret-token-98765"
@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.openai.com/v1"
     LLM_MODEL: str = "gpt-4o-mini"
+
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
+    AUTO_CYCLE_INTERVAL_SECONDS: int = 60
 
     class Config:
         env_file = ".env"

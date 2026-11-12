@@ -2,7 +2,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -22,8 +22,10 @@ from app.services.treasury_engine import (
     suspend_and_recall,
 )
 from app.agents.supreme_manager import execute_autonomous_cycle
+from app.services.telegram_notifier import send_telegram_alert
 
 router = APIRouter()
+AUTONOMY_STATE = {"auto_run_enabled": False}
 
 class CreateAgentPayload(BaseModel):
     name: str = Field(..., min_length=2, max_length=80)
@@ -54,7 +56,44 @@ class RevenuePayload(BaseModel):
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "phase": "PHASE_4_5_EXECUTION_AND_FINANCE", "paper_mode_only": settings.PAPER_MODE_ONLY}
+    return {
+        "status": "ok",
+        "phase": "PHASE_7_8_FULL_AUTONOMOUS_SYSTEM",
+        "auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"],
+        "paper_mode_only": settings.PAPER_MODE_ONLY,
+    }
+
+@router.post("/api/autonomy/toggle", dependencies=[Depends(verify_admin_token)])
+def toggle_autonomy():
+    AUTONOMY_STATE["auto_run_enabled"] = not AUTONOMY_STATE["auto_run_enabled"]
+    return {"auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"]}
+
+@router.post("/api/telegram/webhook")
+async def telegram_webhook(req: Request, db: Session = Depends(get_db)):
+    data = await req.json()
+    msg = data.get("message", {})
+    chat_id = str(msg.get("chat", {}).get("id", ""))
+    text = (msg.get("text") or "").strip().lower()
+    if settings.TELEGRAM_CHAT_ID and chat_id != str(settings.TELEGRAM_CHAT_ID):
+        return {"ok": False}
+
+    if text == "/status":
+        state = check_survival_condition(db)
+        cap = get_total_capital(db, state)
+        await send_telegram_alert(
+            f"📊 AI SURVIVOR STATUS\nState: {state.survival_status}\nCapital: INR {cap:.2f}\n"
+            f"Treasury: INR {state.treasury_balance:.2f}\nCycles: {state.cycle_count}\nAuto-Loop: {AUTONOMY_STATE['auto_run_enabled']}"
+        )
+    elif text == "/cycle":
+        res = await execute_autonomous_cycle(db)
+        await send_telegram_alert(f"⚡ Cycle #{res.get('cycle')} executed. Total Capital: INR {res.get('total_capital', 0):.2f}")
+    elif text == "/pause":
+        AUTONOMY_STATE["auto_run_enabled"] = False
+        await send_telegram_alert("⏸️ Autonomous 24/7 loop PAUSED.")
+    elif text == "/resume":
+        AUTONOMY_STATE["auto_run_enabled"] = True
+        await send_telegram_alert("▶️ Autonomous 24/7 loop RESUMED.")
+    return {"ok": True}
 
 @router.get("/api/state", dependencies=[Depends(verify_admin_token)])
 def get_system_state(db: Session = Depends(get_db)):
@@ -84,6 +123,7 @@ def get_system_state(db: Session = Depends(get_db)):
     return {
         "treasury": {
             "survival_status": state.survival_status,
+            "auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"],
             "paper_mode_only": state.paper_mode_only,
             "cycle_count": state.cycle_count or 0,
             "initial_capital": state.initial_capital,
@@ -205,7 +245,11 @@ def download_artifact(file_name: str):
 
 @router.post("/api/cycle/run", dependencies=[Depends(verify_admin_token)])
 async def run_cycle(db: Session = Depends(get_db)):
-    return await execute_autonomous_cycle(db)
+    res = await execute_autonomous_cycle(db)
+    await send_telegram_alert(
+        f"⚡ AI SURVIVOR Cycle #{res.get('cycle')} Complete | Capital: INR {res.get('total_capital', 0):.2f}"
+    )
+    return res
 
 @router.post("/api/agents", dependencies=[Depends(verify_admin_token)])
 def create_agent(payload: CreateAgentPayload, db: Session = Depends(get_db)):
@@ -260,7 +304,7 @@ def log_expense(payload: ExpensePayload, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/api/ledger/revenue", dependencies=[Depends(verify_admin_token)])
-def log_revenue(payload: RevenuePayload, db: Session = Depends(get_db)):
+async def log_revenue(payload: RevenuePayload, db: Session = Depends(get_db)):
     try:
         entry = record_revenue(
             db=db,
@@ -270,6 +314,8 @@ def log_revenue(payload: RevenuePayload, db: Session = Depends(get_db)):
             verified_real_cash=payload.verified_real_cash,
             idempotency_key=payload.idempotency_key,
         )
+        if not entry.is_simulated:
+            await send_telegram_alert(f"💰 VERIFIED REAL REVENUE: +INR {entry.amount:.2f} | Total Capital: INR {entry.total_capital_after:.2f}")
         return {
             "transaction_id": entry.id,
             "is_simulated": entry.is_simulated,
@@ -285,6 +331,6 @@ def backup_db():
         raise HTTPException(status_code=404, detail="Database file not found yet.")
     Path("backups").mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = Path("backups") / f"ai_survivor_p4_{ts}.db"
+    dest = Path("backups") / f"ai_survivor_full_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
