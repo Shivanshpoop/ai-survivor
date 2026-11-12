@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI SURVIVOR — Phase 1 Core Engine</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #131a26;
+      --border: #233044;
+      --text: #e6edf7;
+      --muted: #8b9bb4;
+      --green: #10b981;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 18px;
+    }
+    h1 { font-size: 1.35rem; }
+    .sub { color: var(--muted); font-size: 0.85rem; }
+    input, select, button {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 11px;
+      border-radius: 6px;
+      font-size: 0.86rem;
+    }
+    button { cursor: pointer; font-weight: 600; }
+    button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+    .badge {
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .ALIVE, .ACTIVE, .LOW { background: rgba(16,185,129,0.18); color: var(--green); }
+    .DESTROYED, .CRITICAL { background: rgba(239,68,68,0.2); color: var(--red); }
+    .SUSPENDED, .ELEVATED, .SIM { background: rgba(245,158,11,0.2); color: var(--amber); }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 15px;
+    }
+    .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; }
+    .val { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(410px, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    h2 { font-size: 1rem; margin-bottom: 12px; color: #cbd5e1; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .agent-box { background: #0f1520; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AI SURVIVOR — Phase 1 Core Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
+      <div class="sub">Central Treasury • Double-Entry Ledger • Agent Budget Isolation • Survival Monitor</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="password" id="tokenInput" placeholder="Paste ADMIN_TOKEN" />
+      <button class="primary" onclick="connect()">Connect</button>
+      <button onclick="backup()">Backup DB</button>
+    </div>
+  </header>
+
+  <div class="grid-4" id="metrics"></div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2>Agent Registry & Budget Isolation</h2>
+    <div class="agent-grid" id="agents"></div>
+    <div class="row" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+      <input type="text" id="agName" placeholder="Agent Name (e.g. Market Researcher)" />
+      <input type="text" id="agRole" placeholder="Role (e.g. RESEARCH)" />
+      <input type="text" id="agMission" placeholder="Mission" style="flex:1; min-width:180px;" />
+      <input type="number" id="agBudget" placeholder="Budget (INR)" style="width:130px;" />
+      <button class="primary" onclick="spawnAgent()">+ Create Agent</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h2>Record Ledger Action (Test Budget Rules & Survival Engine)</h2>
+    <div class="row">
+      <select id="txAgent"></select>
+      <select id="txType">
+        <option value="EXPENSE">Record Agent Expense (Deducts Real Capital)</option>
+        <option value="REVENUE">Record Paper/Test Return (Isolated from Real Cash)</option>
+      </select>
+      <input type="number" id="txAmount" placeholder="Amount (INR)" style="width:140px;" />
+      <input type="text" id="txDesc" placeholder="Description" style="flex:1; min-width:200px;" />
+      <button class="primary" onclick="submitTx()">Execute Transaction</button>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Immutable Financial Ledger</h2>
+      <div style="max-height:300px; overflow-y:auto;">
+        <table>
+          <thead><tr><th>Type</th><th>Amount</th><th>Total Capital</th><th>Details</th></tr></thead>
+          <tbody id="ledger"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Security & Survival Audit Log</h2>
+      <div style="max-height:300px; overflow-y:auto;" id="audits"></div>
+    </div>
+  </div>
+
+  <script>
+    const tokenEl = document.getElementById("tokenInput");
+    tokenEl.value = localStorage.getItem("ai_survivor_p1_token") || "";
+
+    function headers() {
+      return {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + (localStorage.getItem("ai_survivor_p1_token") || "")
+      };
+    }
+
+    function connect() {
+      localStorage.setItem("ai_survivor_p1_token", tokenEl.value.trim());
+      refresh();
+    }
+
+    async function refresh() {
+      const res = await fetch("/api/state", { headers: headers() });
+      if (!res.ok) {
+        alert("Invalid ADMIN_TOKEN. Copy ADMIN_TOKEN from .env and click Connect.");
+        return;
+      }
+      const data = await res.json();
+      const t = data.treasury;
+
+      const sb = document.getElementById("statusBadge");
+      sb.textContent = t.survival_status;
+      sb.className = "badge " + t.survival_status;
+
+      document.getElementById("metrics").innerHTML = `
+        <div class="card">
+          <div class="label">Total Reconciled Capital</div>
+          <div class="val">₹${t.total_capital.toFixed(2)}</div>
+          <div class="sub">Initial: ₹${t.initial_capital.toFixed(2)}</div>
+        </div>
+        <div class="card">
+          <div class="label">Central Treasury Cash</div>
+          <div class="val">₹${t.treasury_balance.toFixed(2)}</div>
+          <div class="sub">Spendable: ₹${t.spendable_treasury.toFixed(2)} | Reserve: ₹${t.emergency_reserve.toFixed(2)}</div>
+        </div>
+        <div class="card">
+          <div class="label">Expenses & Paper PnL</div>
+          <div class="val" style="color:var(--red);">-₹${t.total_expenses.toFixed(2)}</div>
+          <div class="sub">Paper PnL: +₹${t.simulated_paper_pnl.toFixed(2)} (Isolated)</div>
+        </div>
+        <div class="card">
+          <div class="label">Survival Risk Level</div>
+          <div class="val"><span class="badge ${t.risk_level}">${t.risk_level}</span></div>
+          <div class="sub">Agent Balances Held: ₹${t.agent_held_balance.toFixed(2)}</div>
+        </div>
+      `;
+
+      document.getElementById("agents").innerHTML = data.agents.map(a => `
+        <div class="agent-box">
+          <div style="display:flex; justify-content:space-between;">
+            <strong>${a.name}</strong>
+            <span class="badge ${a.status}">${a.status}</span>
+          </div>
+          <div class="sub" style="margin:4px 0;">${a.id} • ${a.role}</div>
+          <div style="font-size:0.83rem; margin-bottom:6px;">${a.mission}</div>
+          <div style="font-size:0.82rem;">
+            Balance: <strong>₹${a.current_balance.toFixed(2)}</strong> / ₹${a.allocated_budget.toFixed(2)}<br/>
+            Expenses: ₹${a.expenses.toFixed(2)} | Paper PnL: ₹${a.simulated_pnl.toFixed(2)}
+          </div>
+          ${a.status === "ACTIVE" ? `<button class="danger" style="margin-top:8px; padding:4px 8px; font-size:0.75rem;" onclick="suspend('${a.id}')">Suspend & Recall</button>` : ""}
+        </div>
+      `).join("");
+
+      document.getElementById("txAgent").innerHTML = data.agents
+        .filter(a => a.status === "ACTIVE")
+        .map(a => `<option value="${a.id}">${a.name} (₹${a.current_balance.toFixed(2)})</option>`)
+        .join("");
+
+      document.getElementById("ledger").innerHTML = data.ledger.map(l => `
+        <tr>
+          <td><span class="badge ${l.is_simulated ? 'SIM' : 'ACTIVE'}">${l.entry_type}</span></td>
+          <td>₹${l.amount.toFixed(2)}</td>
+          <td>₹${l.total_capital_after.toFixed(2)}</td>
+          <td>${l.description}</td>
+        </tr>
+      `).join("");
+
+      document.getElementById("audits").innerHTML = data.audit_logs.map(g => `
+        <div style="padding:6px 0; border-bottom:1px solid var(--border); font-size:0.82rem;">
+          <strong>[${g.actor}]</strong> ${g.details}
+          <div class="sub" style="font-size:0.74rem;">${g.action} • ${g.created_at || ""}</div>
+        </div>
+      `).join("");
+    }
+
+    async function spawnAgent() {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          name: document.getElementById("agName").value,
+          role: document.getElementById("agRole").value,
+          mission: document.getElementById("agMission").value,
+          initial_budget: parseFloat(document.getElementById("agBudget").value || "0")
+        })
+      });
+      if (res.ok) {
+        document.getElementById("agName").value = "";
+        document.getElementById("agRole").value = "";
+        document.getElementById("agMission").value = "";
+        document.getElementById("agBudget").value = "";
+        refresh();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Failed to create agent");
+      }
+    }
+
+    async function submitTx() {
+      const type = document.getElementById("txType").value;
+      const endpoint = type === "EXPENSE" ? "/api/ledger/expense" : "/api/ledger/revenue";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          agent_id: document.getElementById("txAgent").value,
+          amount: parseFloat(document.getElementById("txAmount").value || "0"),
+          description: document.getElementById("txDesc").value
+        })
+      });
+      if (res.ok) {
+        document.getElementById("txAmount").value = "";
+        document.getElementById("txDesc").value = "";
+        refresh();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Transaction rejected");
+      }
+    }
+
+    async function suspend(id) {
+      const res = await fetch(`/api/agents/${id}/suspend`, { method: "POST", headers: headers() });
+      if (res.ok) refresh();
+    }
+
+    async function backup() {
+      const res = await fetch("/api/system/backup", { method: "POST", headers: headers() });
+      if (res.ok) {
+        const data = await res.json();
+        alert("Backup created: " + data.path);
+      }
+    }
+
+    if (localStorage.getItem("ai_survivor_p1_token")) refresh();
+  </script>
+</body>
+</html>
