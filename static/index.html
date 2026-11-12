@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI SURVIVOR — Phase 1 Core Engine</title>
+  <title>AI SURVIVOR — Phase 2 & 3 Autonomous Command Center</title>
   <style>
     :root {
       --bg: #0b0f17;
@@ -45,16 +45,17 @@
     }
     button { cursor: pointer; font-weight: 600; }
     button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    button.success { background: var(--green); border-color: var(--green); color: #052016; }
     button.danger { background: var(--red); border-color: var(--red); color: #fff; }
     .badge {
       padding: 3px 9px;
       border-radius: 999px;
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       font-weight: 700;
     }
-    .ALIVE, .ACTIVE, .LOW { background: rgba(16,185,129,0.18); color: var(--green); }
-    .DESTROYED, .CRITICAL { background: rgba(239,68,68,0.2); color: var(--red); }
-    .SUSPENDED, .ELEVATED, .SIM { background: rgba(245,158,11,0.2); color: var(--amber); }
+    .ALIVE, .ACTIVE, .LOW, .COMPLETED, .APPROVED { background: rgba(16,185,129,0.18); color: var(--green); }
+    .DESTROYED, .CRITICAL, .REJECTED { background: rgba(239,68,68,0.2); color: var(--red); }
+    .SUSPENDED, .ELEVATED, .SIM, .MEDIUM { background: rgba(245,158,11,0.2); color: var(--amber); }
     .grid-4 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -76,8 +77,8 @@
       margin-bottom: 18px;
     }
     h2 { font-size: 1rem; margin-bottom: 12px; color: #cbd5e1; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
     .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
@@ -87,12 +88,13 @@
 <body>
   <header>
     <div>
-      <h1>AI SURVIVOR — Phase 1 Core Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
-      <div class="sub">Central Treasury • Double-Entry Ledger • Agent Budget Isolation • Survival Monitor</div>
+      <h1>AI SURVIVOR — Phase 2 & 3 Multi-Agent Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
+      <div class="sub">Supreme Manager • Autonomous Cycles • Business Research & ROI Engine • Survival Monitor</div>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <input type="password" id="tokenInput" placeholder="Paste ADMIN_TOKEN" />
       <button class="primary" onclick="connect()">Connect</button>
+      <button class="success" id="cycleBtn" onclick="runCycle()">⚡ Run Autonomous Cycle</button>
       <button onclick="backup()">Backup DB</button>
     </div>
   </header>
@@ -100,35 +102,37 @@
   <div class="grid-4" id="metrics"></div>
 
   <div class="card" style="margin-bottom:18px;">
-    <h2>Agent Registry & Budget Isolation</h2>
+    <h2>Multi-Agent Organization & Performance Scores</h2>
     <div class="agent-grid" id="agents"></div>
     <div class="row" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
-      <input type="text" id="agName" placeholder="Agent Name (e.g. Market Researcher)" />
-      <input type="text" id="agRole" placeholder="Role (e.g. RESEARCH)" />
+      <input type="text" id="agName" placeholder="Custom Agent Name" />
+      <input type="text" id="agRole" placeholder="Role (e.g. GROWTH)" />
       <input type="text" id="agMission" placeholder="Mission" style="flex:1; min-width:180px;" />
       <input type="number" id="agBudget" placeholder="Budget (INR)" style="width:130px;" />
-      <button class="primary" onclick="spawnAgent()">+ Create Agent</button>
+      <button class="primary" onclick="spawnAgent()">+ Spawn Custom Agent</button>
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:18px;">
-    <h2>Record Ledger Action (Test Budget Rules & Survival Engine)</h2>
-    <div class="row">
-      <select id="txAgent"></select>
-      <select id="txType">
-        <option value="EXPENSE">Record Agent Expense (Deducts Real Capital)</option>
-        <option value="REVENUE">Record Paper/Test Return (Isolated from Real Cash)</option>
-      </select>
-      <input type="number" id="txAmount" placeholder="Amount (INR)" style="width:140px;" />
-      <input type="text" id="txDesc" placeholder="Description" style="flex:1; min-width:200px;" />
-      <button class="primary" onclick="submitTx()">Execute Transaction</button>
+  <div class="grid-2">
+    <div class="card">
+      <h2>Business Research, Competitor Gaps & Lean Plans</h2>
+      <div style="max-height:320px; overflow-y:auto;">
+        <table>
+          <thead><tr><th>Opportunity</th><th>ROI / Economics</th><th>Plan & Gap</th></tr></thead>
+          <tbody id="opps"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Supreme Manager & Inter-Agent Communications</h2>
+      <div style="max-height:320px; overflow-y:auto;" id="msgs"></div>
     </div>
   </div>
 
   <div class="grid-2">
     <div class="card">
       <h2>Immutable Financial Ledger</h2>
-      <div style="max-height:300px; overflow-y:auto;">
+      <div style="max-height:280px; overflow-y:auto;">
         <table>
           <thead><tr><th>Type</th><th>Amount</th><th>Total Capital</th><th>Details</th></tr></thead>
           <tbody id="ledger"></tbody>
@@ -137,7 +141,7 @@
     </div>
     <div class="card">
       <h2>Security & Survival Audit Log</h2>
-      <div style="max-height:300px; overflow-y:auto;" id="audits"></div>
+      <div style="max-height:280px; overflow-y:auto;" id="audits"></div>
     </div>
   </div>
 
@@ -160,7 +164,7 @@
     async function refresh() {
       const res = await fetch("/api/state", { headers: headers() });
       if (!res.ok) {
-        alert("Invalid ADMIN_TOKEN. Copy ADMIN_TOKEN from .env and click Connect.");
+        alert("Invalid ADMIN_TOKEN. Copy ADMIN_TOKEN and click Connect.");
         return;
       }
       const data = await res.json();
@@ -174,7 +178,7 @@
         <div class="card">
           <div class="label">Total Reconciled Capital</div>
           <div class="val">₹${t.total_capital.toFixed(2)}</div>
-          <div class="sub">Initial: ₹${t.initial_capital.toFixed(2)}</div>
+          <div class="sub">Initial: ₹${t.initial_capital.toFixed(2)} | Cycle #${t.cycle_count}</div>
         </div>
         <div class="card">
           <div class="label">Central Treasury Cash</div>
@@ -200,19 +204,30 @@
             <span class="badge ${a.status}">${a.status}</span>
           </div>
           <div class="sub" style="margin:4px 0;">${a.id} • ${a.role}</div>
-          <div style="font-size:0.83rem; margin-bottom:6px;">${a.mission}</div>
-          <div style="font-size:0.82rem;">
+          <div style="font-size:0.82rem; margin-bottom:6px;">${a.mission}</div>
+          <div style="font-size:0.81rem;">
             Balance: <strong>₹${a.current_balance.toFixed(2)}</strong> / ₹${a.allocated_budget.toFixed(2)}<br/>
-            Expenses: ₹${a.expenses.toFixed(2)} | Paper PnL: ₹${a.simulated_pnl.toFixed(2)}
+            Expenses: ₹${a.expenses.toFixed(2)} | Paper PnL: ₹${a.simulated_pnl.toFixed(2)}<br/>
+            Score: <strong>${a.performance_score}</strong>/100 | Tasks: ${a.tasks_completed}
           </div>
           ${a.status === "ACTIVE" ? `<button class="danger" style="margin-top:8px; padding:4px 8px; font-size:0.75rem;" onclick="suspend('${a.id}')">Suspend & Recall</button>` : ""}
         </div>
       `).join("");
 
-      document.getElementById("txAgent").innerHTML = data.agents
-        .filter(a => a.status === "ACTIVE")
-        .map(a => `<option value="${a.id}">${a.name} (₹${a.current_balance.toFixed(2)})</option>`)
-        .join("");
+      document.getElementById("opps").innerHTML = data.opportunities.map(o => `
+        <tr>
+          <td><strong>${o.title}</strong><br/><span class="badge ${o.status}">${o.status}</span> <span class="sub">${o.category}</span></td>
+          <td>Cost: ₹${o.estimated_cost}<br/>Est Rev: ₹${o.expected_revenue}<br/><strong>ROI: ${o.roi_percent}%</strong></td>
+          <td><div style="font-size:0.79rem;"><strong>Gap:</strong> ${o.competitor_gap}<br/><strong>Plan:</strong> ${o.business_plan}</div></td>
+        </tr>
+      `).join("");
+
+      document.getElementById("msgs").innerHTML = data.messages.map(m => `
+        <div style="padding:7px 0; border-bottom:1px solid var(--border); font-size:0.82rem;">
+          <span class="badge SIM">${m.message_type}</span> <strong>${m.sender} → ${m.recipient}</strong>
+          <div style="margin-top:3px;">${m.content}</div>
+        </div>
+      `).join("");
 
       document.getElementById("ledger").innerHTML = data.ledger.map(l => `
         <tr>
@@ -229,6 +244,20 @@
           <div class="sub" style="font-size:0.74rem;">${g.action} • ${g.created_at || ""}</div>
         </div>
       `).join("");
+    }
+
+    async function runCycle() {
+      const btn = document.getElementById("cycleBtn");
+      btn.disabled = true;
+      btn.textContent = "Running Cycle...";
+      try {
+        const res = await fetch("/api/cycle/run", { method: "POST", headers: headers() });
+        if (res.ok) await refresh();
+        else alert("Cycle failed. Check token or survival status.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "⚡ Run Autonomous Cycle";
+      }
     }
 
     async function spawnAgent() {
@@ -251,28 +280,6 @@
       } else {
         const err = await res.json();
         alert(err.detail || "Failed to create agent");
-      }
-    }
-
-    async function submitTx() {
-      const type = document.getElementById("txType").value;
-      const endpoint = type === "EXPENSE" ? "/api/ledger/expense" : "/api/ledger/revenue";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({
-          agent_id: document.getElementById("txAgent").value,
-          amount: parseFloat(document.getElementById("txAmount").value || "0"),
-          description: document.getElementById("txDesc").value
-        })
-      });
-      if (res.ok) {
-        document.getElementById("txAmount").value = "";
-        document.getElementById("txDesc").value = "";
-        refresh();
-      } else {
-        const err = await res.json();
-        alert(err.detail || "Transaction rejected");
       }
     }
 
