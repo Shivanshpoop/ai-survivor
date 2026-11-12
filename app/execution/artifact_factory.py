@@ -7,120 +7,177 @@ from app.models.domain import DeliverableArtifact, PaperBacktest
 ARTIFACTS_DIR = Path("artifacts")
 ARTIFACTS_DIR.mkdir(exist_ok=True)
 
-def build_deliverable_artifact(db: Session, opp_id: str, opp_title: str, category: str, agent_name: str, price_inr: float) -> DeliverableArtifact:
-    ARTIFACTS_DIR.mkdir(exist_ok=True)
-    safe_slug = "".join(c if c.isalnum() else "_" for c in opp_title.lower())[:36].strip("_")
+PRODUCT_CATALOG = [
+    {
+        "slug": "gst_tally_reconciler",
+        "ext": "py",
+        "type": "PYTHON_AUTOMATION_SCRIPT",
+        "price": 499.0,
+        "pitch": "GSTIN & Invoice CSV deduplicator for CAs/SMBs. Sell at ₹499.",
+        "code": '''import csv, sys
 
-    if "gst" in opp_title.lower() or category == "AUTOMATION":
-        file_name = f"{safe_slug}.py"
-        code_body = f'''"""
-Deliverable: {opp_title}
-Built autonomously by {agent_name} (AI SURVIVOR)
-Commercial License Price: INR {price_inr:.2f}
-"""
-import csv
-import sys
-from pathlib import Path
-
-def reconcile_gst_csv(input_csv: str, output_csv: str):
-    seen = set()
-    cleaned_rows = []
-    with open(input_csv, mode="r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            inv = (row.get("InvoiceNo") or "").strip().upper()
-            gstin = (row.get("GSTIN") or "").strip().upper()
-            key = (inv, gstin)
-            if inv and key not in seen:
+def reconcile_gst(in_csv, out_csv):
+    seen, rows = set(), []
+    with open(in_csv, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            key = ((r.get("InvoiceNo") or "").strip().upper(), (r.get("GSTIN") or "").strip().upper())
+            if key[0] and key not in seen:
                 seen.add(key)
-                row["InvoiceNo"] = inv
-                row["GSTIN"] = gstin
-                cleaned_rows.append(row)
-    if cleaned_rows:
-        with open(output_csv, mode="w", newline="", encoding="utf-8") as out:
-            writer = csv.DictWriter(out, fieldnames=cleaned_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(cleaned_rows)
-    print(f"Reconciled {{len(cleaned_rows)}} unique invoices -> {{output_csv}}")
+                rows.append(r)
+    if rows:
+        with open(out_csv, "w", newline="", encoding="utf-8") as out:
+            w = csv.DictWriter(out, fieldnames=rows[0].keys())
+            w.writeheader()
+            w.writerows(rows)
+    print(f"Reconciled {len(rows)} unique GST invoices -> {out_csv}")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python tool.py input.csv cleaned.csv")
-    else:
-        reconcile_gst_csv(sys.argv[1], sys.argv[2])
+    reconcile_gst(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py in.csv out.csv")
 '''
-        artifact_type = "PYTHON_AUTOMATION_SCRIPT"
-        pitch = f"Ready-to-sell Python CLI utility for Indian accountants & SMBs. Eliminates duplicate GSTIN/Invoice rows in seconds. Suggested price: INR {price_inr:.0f}."
+    },
+    {
+        "slug": "whatsapp_lead_normalizer",
+        "ext": "py",
+        "type": "FREELANCE_DELIVERABLE_SCRIPT",
+        "price": 450.0,
+        "pitch": "+91 Indian phone normalizer & duplicate lead remover for agencies. ₹450/batch.",
+        "code": '''import csv, re, sys
 
-    elif category == "FREELANCING":
-        file_name = f"{safe_slug}_cleaner.py"
-        code_body = f'''"""
-Deliverable: {opp_title}
-Built autonomously by {agent_name} (AI SURVIVOR)
-Service Rate: INR {price_inr:.2f} per batch
-"""
-import csv
-import re
+def norm(p):
+    d = re.sub(r"\\D", "", p or "")
+    return "+91" + d if len(d) == 10 else ("+" + d if len(d) == 12 and d.startswith("91") else "")
 
-def normalize_indian_phone(raw: str) -> str:
-    digits = re.sub(r"\\D", "", raw or "")
-    if len(digits) == 10:
-        return "+91" + digits
-    if len(digits) == 12 and digits.startswith("91"):
-        return "+" + digits
-    return ""
-
-def clean_leads(input_file: str, output_file: str):
-    unique_phones = set()
-    valid = []
-    with open(input_file, "r", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            phone = normalize_indian_phone(row.get("Phone", ""))
-            if phone and phone not in unique_phones:
-                unique_phones.add(phone)
-                row["Phone"] = phone
-                valid.append(row)
-    if valid:
-        with open(output_file, "w", newline="", encoding="utf-8") as out:
-            w = csv.DictWriter(out, fieldnames=valid[0].keys())
+def clean_leads(in_csv, out_csv):
+    seen, out_rows = set(), []
+    with open(in_csv, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            ph = norm(r.get("Phone", ""))
+            if ph and ph not in seen:
+                seen.add(ph)
+                r["Phone"] = ph
+                out_rows.append(r)
+    if out_rows:
+        with open(out_csv, "w", newline="", encoding="utf-8") as out:
+            w = csv.DictWriter(out, fieldnames=out_rows[0].keys())
             w.writeheader()
-            w.writerows(valid)
-    return len(valid)
+            w.writerows(out_rows)
+    print(f"Cleaned {len(out_rows)} valid +91 leads -> {out_csv}")
+
+if __name__ == "__main__":
+    clean_leads(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py raw.csv clean.csv")
 '''
-        artifact_type = "FREELANCE_DELIVERABLE_SCRIPT"
-        pitch = f"Turnkey Python lead-cleaning & +91 WhatsApp normalizer script for agency client delivery. Rate: INR {price_inr:.0f}/batch."
+    },
+    {
+        "slug": "ecommerce_seller_profit_calculator",
+        "ext": "py",
+        "type": "PYTHON_MICRO_SAAS_CLI",
+        "price": 399.0,
+        "pitch": "Amazon/Flipkart/Meesho net margin, GST & RTO loss calculator for D2C sellers. ₹399.",
+        "code": '''def calc_margin(selling_price, cost_price, referral_pct=15.0, shipping=65.0, gst_pct=18.0, rto_pct=12.0):
+    commission = selling_price * (referral_pct / 100.0)
+    gst_on_fees = (commission + shipping) * (gst_pct / 100.0)
+    rto_cost = shipping * (rto_pct / 100.0)
+    net_profit = selling_price - cost_price - commission - shipping - gst_on_fees - rto_cost
+    return round(net_profit, 2), round((net_profit / selling_price) * 100, 1)
 
+if __name__ == "__main__":
+    sp = float(input("Selling Price (INR): "))
+    cp = float(input("Product Cost (INR): "))
+    profit, margin = calc_margin(sp, cp)
+    print(f"Net Profit: INR {profit} ({margin}% margin after fees, GST & RTO)")
+'''
+    },
+    {
+        "slug": "upi_bank_statement_categorizer",
+        "ext": "py",
+        "type": "FINTECH_UTILITY_SCRIPT",
+        "price": 599.0,
+        "pitch": "Auto-tags bank CSV transactions into Food, Travel, SaaS, Rent & Tax buckets. ₹599.",
+        "code": '''import csv, sys
+
+RULES = {"SWIGGY": "Food", "ZOMATO": "Food", "UBER": "Travel", "OLA": "Travel", "AWS": "Cloud/SaaS", "ZERODHA": "Investments"}
+
+def categorize(in_csv, out_csv):
+    rows = []
+    with open(in_csv, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            desc = (r.get("Description") or "").upper()
+            r["Category"] = next((v for k, v in RULES.items() if k in desc), "General")
+            rows.append(r)
+    if rows:
+        with open(out_csv, "w", newline="", encoding="utf-8") as out:
+            w = csv.DictWriter(out, fieldnames=rows[0].keys())
+            w.writeheader()
+            w.writerows(rows)
+    print(f"Categorized {len(rows)} bank entries -> {out_csv}")
+
+if __name__ == "__main__":
+    categorize(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py bank.csv tagged.csv")
+'''
+    },
+    {
+        "slug": "ats_resume_keyword_scorer",
+        "ext": "py",
+        "type": "CAREER_TECH_TOOL",
+        "price": 249.0,
+        "pitch": "Compares Resume text vs Job Description to highlight missing ATS keywords. ₹249.",
+        "code": '''import re, sys
+from pathlib import Path
+
+def score_resume(resume_txt, jd_txt):
+    r_words = set(re.findall(r"[a-zA-Z]{3,}", Path(resume_txt).read_text(encoding="utf-8").lower()))
+    j_words = set(re.findall(r"[a-zA-Z]{3,}", Path(jd_txt).read_text(encoding="utf-8").lower()))
+    matched = r_words & j_words
+    missing = sorted(j_words - r_words)[:20]
+    pct = round((len(matched) / max(1, len(j_words))) * 100, 1)
+    print(f"ATS Match Score: {pct}%\\nTop Missing Keywords: {', '.join(missing)}")
+
+if __name__ == "__main__":
+    score_resume(sys.argv[1], sys.argv[2]) if len(sys.argv) >= 3 else print("Usage: python script.py resume.txt jd.txt")
+'''
+    },
+    {
+        "slug": "freelance_rfp_pricing_kit",
+        "ext": "md",
+        "type": "DIGITAL_PRODUCT_ASSET",
+        "price": 299.0,
+        "pitch": "15 Indian agency RFP templates, scope-creep clauses & rate card. ₹299.",
+        "code": '''# Indian Freelance & Agency RFP + Scope-Creep Protection Kit
+## 1. Payment Milestone Structure
+- **50% Kickoff Advance** (Non-refundable once architecture starts)
+- **30% Staging Demo Sign-off**
+- **20% Final Source Code Handover**
+
+## 2. Scope-Creep Clause
+> Any feature, API integration, or UI revision outside the signed checklist is billed separately at ₹500/hour.
+
+## 3. Cold Outreach Script (WhatsApp / LinkedIn)
+"Hi [Name], noticed your team handles [Task] manually. I built a lightweight Python tool that automates it in 10 seconds with zero monthly fees. Want a 60-second demo?"
+'''
+    },
+]
+
+def build_deliverable_artifact(db: Session, opp_id: str, opp_title: str, category: str, agent_name: str, price_inr: float) -> DeliverableArtifact:
+    ARTIFACTS_DIR.mkdir(exist_ok=True)
+    existing_files = {d.file_name for d in db.query(DeliverableArtifact).all()}
+
+    chosen = next((p for p in PRODUCT_CATALOG if f"{p['slug']}.{p['ext']}" not in existing_files), None)
+    if not chosen:
+        chosen = random.choice(PRODUCT_CATALOG)
+        file_name = f"{chosen['slug']}_v{len(existing_files)+1}.{chosen['ext']}"
     else:
-        file_name = f"{safe_slug}_kit.md"
-        code_body = f"""# {opp_title}
-**Produced by:** {agent_name} (AI SURVIVOR Digital Products Division)  
-**Retail Price:** ₹{price_inr:.2f}
+        file_name = f"{chosen['slug']}.{chosen['ext']}"
 
-## 1. Executive Freelance Proposal Template
-- **Client Problem:** Manual repetitive spreadsheet/workflow overhead costing 8+ hours/week.
-- **Proposed Solution:** Lightweight, zero-subscription Python automation deliverable with 7-day support.
-- **Investment:** ₹{price_inr:.2f} (50% advance, 50% on demo delivery).
-
-## 2. Scope-Creep Protection Clause
-> Any feature requests beyond the agreed CSV/API schema will be scoped as Phase 2 at ₹400/hour.
-
-## 3. Distribution Checklist
-- Publish listing on Gumroad / Topmate / GitHub Sponsors.
-- Share 60-second screen-recording demo in Indian founder & freelancer groups.
-"""
-        artifact_type = "DIGITAL_PRODUCT_ASSET"
-        pitch = f"Complete commercial digital template pack with pricing calculator & client outreach script. Retail price: INR {price_inr:.0f}."
-
-    (ARTIFACTS_DIR / file_name).write_text(code_body, encoding="utf-8")
+    (ARTIFACTS_DIR / file_name).write_text(chosen["code"], encoding="utf-8")
 
     art = DeliverableArtifact(
         opportunity_id=opp_id,
         agent_name=agent_name,
         title=opp_title,
-        artifact_type=artifact_type,
+        artifact_type=chosen["type"],
         file_name=file_name,
-        suggested_price_inr=price_inr,
-        pitch_copy=pitch,
+        suggested_price_inr=chosen["price"],
+        pitch_copy=chosen["pitch"],
     )
     db.add(art)
     db.commit()
@@ -128,23 +185,15 @@ def clean_leads(input_file: str, output_file: str):
     return art
 
 def run_paper_strategy_backtest(db: Session, strategy_name: str = "NIFTY50-EMA20-Breakout") -> PaperBacktest:
-    # Deterministic-bounded Monte Carlo walk-forward simulation (strictly paper mode, zero real money)
     returns = [random.gauss(0.0045, 0.012) for _ in range(60)]
-    equity = 10000.0
-    peak = equity
-    max_dd = 0.0
-    wins = 0
+    equity, peak, max_dd, wins = 10000.0, 10000.0, 0.0, 0
     for r in returns:
-        # Enforce strict 1.5% stop-loss cap per trade
         capped_r = max(-0.015, r)
         if capped_r > 0:
             wins += 1
         equity *= (1.0 + capped_r)
-        if equity > peak:
-            peak = equity
-        dd = ((peak - equity) / peak) * 100.0
-        if dd > max_dd:
-            max_dd = dd
+        peak = max(peak, equity)
+        max_dd = max(max_dd, ((peak - equity) / peak) * 100.0)
 
     net_ret = round(((equity - 10000.0) / 10000.0) * 100.0, 2)
     win_rate = round((wins / len(returns)) * 100.0, 1)
