@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, Boolean, DateTime, Integer, ForeignKey, Text
 from app.core.database import Base
@@ -9,7 +9,7 @@ def utcnow():
 class TreasuryState(Base):
     __tablename__ = "treasury_state"
     id = Column(Integer, primary_key=True, default=1)
-    survival_status = Column(String, default="ALIVE")  # ALIVE | DESTROYED
+    survival_status = Column(String, default="ALIVE")
     initial_capital = Column(Float, default=5000.0)
     treasury_balance = Column(Float, default=5000.0)
     emergency_reserve = Column(Float, default=1000.0)
@@ -17,6 +17,7 @@ class TreasuryState(Base):
     total_expenses = Column(Float, default=0.0)
     simulated_paper_pnl = Column(Float, default=0.0)
     paper_mode_only = Column(Boolean, default=True)
+    cycle_count = Column(Integer, default=0)
     destruction_reason = Column(Text, nullable=True)
     destroyed_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -34,7 +35,8 @@ class Agent(Base):
     simulated_pnl = Column(Float, default=0.0)
     performance_score = Column(Float, default=50.0)
     risk_score = Column(Float, default=20.0)
-    status = Column(String, default="ACTIVE")  # ACTIVE | SUSPENDED | DESTROYED
+    tasks_completed = Column(Integer, default=0)
+    status = Column(String, default="ACTIVE")
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -42,13 +44,38 @@ class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
     id = Column(String, primary_key=True, default=lambda: f"TXN-{uuid.uuid4().hex[:8].upper()}")
     idempotency_key = Column(String, unique=True, nullable=True)
-    entry_type = Column(String, nullable=False)  # GENESIS | ALLOCATION | RECALL | EXPENSE | REVENUE | PAPER_PNL
+    entry_type = Column(String, nullable=False)
     is_simulated = Column(Boolean, default=False)
     agent_id = Column(String, ForeignKey("agents.id"), nullable=True)
     amount = Column(Float, nullable=False)
     treasury_after = Column(Float, nullable=False)
     total_capital_after = Column(Float, nullable=False)
     description = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+class Opportunity(Base):
+    __tablename__ = "opportunities"
+    id = Column(String, primary_key=True, default=lambda: f"OPP-{uuid.uuid4().hex[:6].upper()}")
+    title = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    target_market = Column(String, default="Indian SMBs & Freelancers")
+    competitor_gap = Column(Text, nullable=False)
+    business_plan = Column(Text, nullable=False)
+    estimated_cost = Column(Float, default=0.0)
+    expected_revenue = Column(Float, default=0.0)
+    roi_percent = Column(Float, default=0.0)
+    risk_level = Column(String, default="LOW")
+    status = Column(String, default="RESEARCHED")
+    assigned_agent_id = Column(String, ForeignKey("agents.id"), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+class AgentMessage(Base):
+    __tablename__ = "agent_messages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sender = Column(String, nullable=False)
+    recipient = Column(String, nullable=False)
+    message_type = Column(String, default="DELEGATION")
+    content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
 
 class AuditLog(Base):

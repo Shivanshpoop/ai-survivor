@@ -1,8 +1,8 @@
-from pydantic_settings import BaseSettings
+﻿from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    APP_NAME: str = "AI SURVIVOR — Phase 1 Core Engine"
-    ENVIRONMENT: str = "development"
+    APP_NAME: str = "AI SURVIVOR — Phase 2 & 3 Autonomous Engine"
+    ENVIRONMENT: str = "production"
     DATABASE_URL: str = "sqlite:///./ai_survivor_p1.db"
     ADMIN_TOKEN: str = "change-me-to-a-strong-secret-token-98765"
 
@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     EMERGENCY_RESERVE_RATIO: float = 0.20
     MAX_SINGLE_ALLOCATION_RATIO: float = 0.30
     PAPER_MODE_ONLY: bool = True
+
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_MODEL: str = "gpt-4o-mini"
 
     class Config:
         env_file = ".env"

@@ -1,4 +1,4 @@
-import shutil
+﻿import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_admin_token
 from app.core.config import settings
-from app.models.domain import Agent, LedgerEntry, AuditLog
+from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage
 from app.services.treasury_engine import (
     check_survival_condition,
     get_total_capital,
@@ -20,6 +20,7 @@ from app.services.treasury_engine import (
     record_revenue,
     suspend_and_recall,
 )
+from app.agents.supreme_manager import execute_autonomous_cycle
 
 router = APIRouter()
 
@@ -52,7 +53,7 @@ class RevenuePayload(BaseModel):
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "phase": "PHASE_1_CORE_ENGINE", "paper_mode_only": settings.PAPER_MODE_ONLY}
+    return {"status": "ok", "phase": "PHASE_2_3_MULTI_AGENT_INTELLIGENCE", "paper_mode_only": settings.PAPER_MODE_ONLY}
 
 @router.get("/api/state", dependencies=[Depends(verify_admin_token)])
 def get_system_state(db: Session = Depends(get_db)):
@@ -68,13 +69,16 @@ def get_system_state(db: Session = Depends(get_db)):
         risk_level = "ELEVATED"
 
     agents = db.query(Agent).order_by(Agent.created_at.desc()).all()
-    ledger = db.query(LedgerEntry).order_by(LedgerEntry.created_at.desc()).limit(50).all()
-    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(40).all()
+    ledger = db.query(LedgerEntry).order_by(LedgerEntry.created_at.desc()).limit(40).all()
+    opportunities = db.query(Opportunity).order_by(Opportunity.created_at.desc()).limit(20).all()
+    messages = db.query(AgentMessage).order_by(AgentMessage.id.desc()).limit(30).all()
+    audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(30).all()
 
     return {
         "treasury": {
             "survival_status": state.survival_status,
             "paper_mode_only": state.paper_mode_only,
+            "cycle_count": state.cycle_count or 0,
             "initial_capital": state.initial_capital,
             "treasury_balance": state.treasury_balance,
             "agent_held_balance": agent_held,
@@ -101,9 +105,37 @@ def get_system_state(db: Session = Depends(get_db)):
                 "simulated_pnl": a.simulated_pnl,
                 "performance_score": a.performance_score,
                 "risk_score": a.risk_score,
+                "tasks_completed": a.tasks_completed or 0,
                 "status": a.status,
             }
             for a in agents
+        ],
+        "opportunities": [
+            {
+                "id": o.id,
+                "title": o.title,
+                "category": o.category,
+                "target_market": o.target_market,
+                "competitor_gap": o.competitor_gap,
+                "business_plan": o.business_plan,
+                "estimated_cost": o.estimated_cost,
+                "expected_revenue": o.expected_revenue,
+                "roi_percent": o.roi_percent,
+                "risk_level": o.risk_level,
+                "status": o.status,
+            }
+            for o in opportunities
+        ],
+        "messages": [
+            {
+                "id": m.id,
+                "sender": m.sender,
+                "recipient": m.recipient,
+                "message_type": m.message_type,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in messages
         ],
         "ledger": [
             {
@@ -130,6 +162,10 @@ def get_system_state(db: Session = Depends(get_db)):
             for g in audits
         ],
     }
+
+@router.post("/api/cycle/run", dependencies=[Depends(verify_admin_token)])
+async def run_cycle(db: Session = Depends(get_db)):
+    return await execute_autonomous_cycle(db)
 
 @router.post("/api/agents", dependencies=[Depends(verify_admin_token)])
 def create_agent(payload: CreateAgentPayload, db: Session = Depends(get_db)):
@@ -209,6 +245,6 @@ def backup_db():
         raise HTTPException(status_code=404, detail="Database file not found yet.")
     Path("backups").mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = Path("backups") / f"ai_survivor_p1_{ts}.db"
+    dest = Path("backups") / f"ai_survivor_p2_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
