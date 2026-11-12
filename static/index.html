@@ -230,7 +230,7 @@
       `;
 
       const activeAgents = data.agents.filter(a => a.status === "ACTIVE");
-      document.getElementById("revAgent").innerHTML = activeAgents.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join("");
+      const sel = document.getElementById("revAgent"); const prev = sel.value; sel.innerHTML = activeAgents.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join(""); if (prev && activeAgents.some(a => a.id === prev)) sel.value = prev;
 
       document.getElementById("agents").innerHTML = data.agents.map(a => `
         <div class="agent-box">
@@ -359,4 +359,5 @@
   </script>
 </body>
 </html>
+
 
