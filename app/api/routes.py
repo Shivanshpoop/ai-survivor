@@ -506,3 +506,4 @@ def backup_db():
     dest = Path("backups") / f"ai_survivor_fampay_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
+
