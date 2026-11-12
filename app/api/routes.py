@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_admin_token
 from app.core.config import settings
-from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage, DeliverableArtifact, PaperBacktest, RealOrder
+from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage, DeliverableArtifact, PaperBacktest, RealOrder, WorkerTask
 from app.services.treasury_engine import (
     check_survival_condition,
     get_total_capital,
@@ -24,10 +24,10 @@ from app.services.treasury_engine import (
     write_audit,
 )
 from app.agents.supreme_manager import execute_autonomous_cycle
-from app.services.telegram_notifier import send_telegram_alert
+from app.services.telegram_notifier import send_telegram_alert, register_telegram_commands_and_webhook
 
 router = APIRouter()
-AUTONOMY_STATE = {"auto_run_enabled": False}
+AUTONOMY_STATE = {"auto_run_enabled": True}
 
 class CreateAgentPayload(BaseModel):
     name: str = Field(..., min_length=2, max_length=80)
@@ -59,7 +59,12 @@ class RevenuePayload(BaseModel):
 class UpiClaimPayload(BaseModel):
     artifact_id: str
     buyer_email: str = Field(..., min_length=5)
-    utr_number: str = Field(..., min_length=6, max_length=40)
+    utr_number: str = Field(..., min_length=10, max_length=30)
+    shipping_address: str = Field(default="Digital Delivery")
+
+class WorkerResultPayload(BaseModel):
+    status: str = "COMPLETED"
+    result_note: str = ""
 
 @router.get("/store")
 def public_store_page():
@@ -91,17 +96,20 @@ def get_public_catalog(db: Session = Depends(get_db)):
                 "upi_uri": upi_uri,
                 "qr_url": qr_url,
                 "units_sold": d.units_sold or 0,
-                "built_by": d.agent_name,
             })
     return {
-        "store_name": "AI SURVIVOR Digital Tools Store",
+        "store_name": "NovaCraft Studio",
         "upi_id": settings.FAMPAY_UPI_ID,
+        "business_email": settings.BUSINESS_EMAIL,
         "products": unique_items,
     }
 
 @router.post("/api/store/claim-upi")
-async def claim_fampay_upi_order(payload: UpiClaimPayload, db: Session = Depends(get_db)):
-    utr = payload.utr_number.strip().upper()
+async def submit_fampay_upi_order(payload: UpiClaimPayload, db: Session = Depends(get_db)):
+    utr = "".join(ch for ch in payload.utr_number.strip().upper() if ch.isalnum())
+    if len(utr) < 10:
+        raise HTTPException(status_code=400, detail="Enter valid 12-digit UPI UTR Reference Number")
+
     existing = db.query(RealOrder).filter(RealOrder.payment_ref == utr).first()
     if existing:
         return {
@@ -118,29 +126,32 @@ async def claim_fampay_upi_order(payload: UpiClaimPayload, db: Session = Depends
         payment_ref=utr,
         artifact_id=art.id,
         buyer_email=payload.buyer_email.strip(),
+        shipping_address=(payload.shipping_address or "Digital Delivery").strip(),
         amount_inr=art.suggested_price_inr,
         status="PENDING_UPI_VERIFY",
     )
     db.add(order)
-    write_audit(db, "STOREFRONT_UPI", "UPI_CLAIM_SUBMITTED", f"Order {order.id}: UTR {utr} for {art.file_name} (INR {art.suggested_price_inr:.2f})")
+    write_audit(db, "NOVACRAFT_STORE", "UPI_PAYMENT_PENDING", f"Order {order.id}: UTR {utr} | {art.file_name} (INR {art.suggested_price_inr:.2f})")
     db.commit()
     db.refresh(order)
 
-    approve_url = f"https://ai-survivor.onrender.com/api/orders/{order.id}/approve-upi?token={urllib.parse.quote(settings.ADMIN_TOKEN)}"
+    approve_url = f"{settings.PUBLIC_STORE_URL}/api/orders/{order.id}/approve-upi?token={urllib.parse.quote(settings.ADMIN_TOKEN)}"
     await send_telegram_alert(
-        f"🔔 NEW FAMPAY UPI PAYMENT CLAIM!\n"
-        f"Order: {order.id}\n"
-        f"Product: {art.file_name}\n"
-        f"Amount: ₹{art.suggested_price_inr:.2f}\n"
-        f"UTR Ref: {utr}\n"
-        f"Buyer: {order.buyer_email}\n\n"
-        f"Check FamPay app & tap to approve + unlock download:\n{approve_url}"
+        f"💳 PAYMENT APPROVAL REQUEST (FamPay UPI)\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"• Order: {order.id}\n"
+        f"• Item: {art.file_name} ({art.artifact_type})\n"
+        f"• Amount: ₹{art.suggested_price_inr:.2f}\n"
+        f"• UTR Ref: {utr}\n"
+        f"• Buyer: {order.buyer_email}\n"
+        f"• Shipping: {order.shipping_address}\n\n"
+        f"👉 Check FamPay & Tap to Approve:\n{approve_url}"
     )
 
     return {
         "order_id": order.id,
         "status": order.status,
-        "message": "UTR submitted! Check status below — download unlocks immediately once verified.",
+        "message": "Payment UTR received! Verifying in 5-15 seconds...",
     }
 
 @router.get("/api/store/order-status/{order_id}")
@@ -164,7 +175,7 @@ async def approve_upi_order_via_link(order_id: str, token: str = Query(...), db:
         raise HTTPException(status_code=404, detail="Order not found")
 
     if order.status == "PAID_DELIVERED":
-        return HTMLResponse(f"<h2>Already Approved!</h2><p>Order {order.id} is already credited and unlocked for buyer.</p>")
+        return HTMLResponse(f"<h2>Already Approved!</h2><p>Order {order.id} is already unlocked.</p>")
 
     art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == order.artifact_id).first()
     agent = db.query(Agent).filter(Agent.id == (art.agent_id if art else "")).first() or db.query(Agent).filter(Agent.status == "ACTIVE").first()
@@ -175,50 +186,85 @@ async def approve_upi_order_via_link(order_id: str, token: str = Query(...), db:
         db=db,
         agent_id=agent.id,
         amount=order.amount_inr,
-        description=f"FAMPAY VERIFIED [{order.payment_ref}] {art.file_name if art else order.artifact_id} -> {order.buyer_email}",
+        description=f"FAMPAY APPROVED [{order.payment_ref}] {art.file_name if art else order.artifact_id} -> {order.buyer_email}",
         verified_real_cash=True,
         idempotency_key=f"UPI-{order.payment_ref}",
     )
 
     if art:
         art.units_sold = (art.units_sold or 0) + 1
+        if art.artifact_type == "MERCH_POD":
+            db.add(WorkerTask(
+                task_type="FULFILL_POD_SUPPLIER",
+                target_url="https://qikink.com",
+                subject=f"POD Fulfillment Order {order.id}: {art.file_name}",
+                payload_text=f"Buyer: {order.buyer_email}\nShipping: {order.shipping_address}\nItem: {art.title}",
+            ))
+
     order.status = "PAID_DELIVERED"
-    write_audit(db, "FAMPAY_VERIFIER", "UPI_ORDER_APPROVED", f"Order {order.id} approved: +INR {order.amount_inr:.2f}")
+    write_audit(db, "FAMPAY_GATE", "PAYMENT_APPROVED", f"Order {order.id} approved: +INR {order.amount_inr:.2f}")
     db.commit()
 
     await send_telegram_alert(
-        f"💰 FAMPAY SALE CREDITED TO TREASURY!\n"
-        f"Order: {order.id} | UTR: {order.payment_ref}\n"
-        f"Added: +₹{order.amount_inr:.2f}\n"
-        f"New Total Capital: ₹{entry.total_capital_after:.2f}"
+        f"✅ PAYMENT APPROVED & CREDITED!\n"
+        f"• Order: {order.id} | UTR: {order.payment_ref}\n"
+        f"• Added: +₹{order.amount_inr:.2f}\n"
+        f"• New Capital: ₹{entry.total_capital_after:.2f}\n"
+        f"• Buyer receipt/download unlocked!"
     )
 
     return HTMLResponse(
         f"<div style='font-family:sans-serif;padding:30px;background:#0b0f17;color:#10b981;'>"
         f"<h1>✅ FamPay Payment Approved!</h1>"
-        f"<p style='color:#e6edf7;'>Order <b>{order.id}</b> (+₹{order.amount_inr:.2f}) added to Central Treasury.<br/>"
-        f"New Total Capital: <b>₹{entry.total_capital_after:.2f}</b>. Buyer download is now unlocked.</p></div>"
+        f"<p style='color:#e6edf7;'>Order <b>{order.id}</b> (+₹{order.amount_inr:.2f}) credited to Treasury.<br/>"
+        f"New Total Capital: <b>₹{entry.total_capital_after:.2f}</b>.</p></div>"
     )
 
 @router.get("/api/store/fulfill/{download_token}")
 def fulfill_paid_order(download_token: str, db: Session = Depends(get_db)):
     order = db.query(RealOrder).filter(RealOrder.download_token == download_token).first()
     if not order or order.status != "PAID_DELIVERED":
-        raise HTTPException(status_code=403, detail="Payment pending verification")
+        raise HTTPException(status_code=403, detail="Payment pending approval")
     art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == order.artifact_id).first()
     if not art:
-        raise HTTPException(status_code=404, detail="Product file missing")
+        raise HTTPException(status_code=404, detail="Product missing")
     target = Path("artifacts") / Path(art.file_name).name
     if not target.exists():
-        raise HTTPException(status_code=404, detail="File missing on disk; run 1 cycle in admin.")
+        raise HTTPException(status_code=404, detail="File missing on disk")
     return FileResponse(target, filename=art.file_name)
+
+@router.get("/api/worker/tasks", dependencies=[Depends(verify_admin_token)])
+def fetch_pending_worker_tasks(db: Session = Depends(get_db)):
+    tasks = db.query(WorkerTask).filter(WorkerTask.status == "PENDING").order_by(WorkerTask.created_at.asc()).limit(10).all()
+    return {
+        "tasks": [
+            {
+                "id": t.id,
+                "task_type": t.task_type,
+                "target_url": t.target_url,
+                "subject": t.subject,
+                "payload_text": t.payload_text,
+            }
+            for t in tasks
+        ]
+    }
+
+@router.post("/api/worker/tasks/{task_id}/complete", dependencies=[Depends(verify_admin_token)])
+async def complete_worker_task(task_id: str, payload: WorkerResultPayload, db: Session = Depends(get_db)):
+    t = db.query(WorkerTask).filter(WorkerTask.id == task_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Task not found")
+    t.status = payload.status
+    t.result_note = payload.result_note
+    db.commit()
+    await send_telegram_alert(f"🤖 LOCAL BROWSER WORKER COMPLETED:\n• Task: {t.task_type}\n• {t.subject}\n• Note: {t.result_note}")
+    return {"id": t.id, "status": t.status}
 
 @router.get("/health")
 def health():
     return {
         "status": "ok",
-        "phase": "FAMPAY_UPI_REAL_STORE",
-        "fampay_upi_configured": settings.FAMPAY_UPI_ID != "yourname@fam",
+        "brand": "NovaCraft Studio",
         "auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"],
     }
 
@@ -227,31 +273,65 @@ def toggle_autonomy():
     AUTONOMY_STATE["auto_run_enabled"] = not AUTONOMY_STATE["auto_run_enabled"]
     return {"auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"]}
 
+@router.get("/api/telegram/setup")
+async def setup_telegram_endpoint():
+    return await register_telegram_commands_and_webhook()
+
 @router.post("/api/telegram/webhook")
 async def telegram_webhook(req: Request, db: Session = Depends(get_db)):
     data = await req.json()
-    msg = data.get("message", {})
-    chat_id = str(msg.get("chat", {}).get("id", ""))
+    msg = data.get("message") or data.get("edited_message") or {}
+    chat_id = str(msg.get("chat", {}).get("id", "")).strip()
     text = (msg.get("text") or "").strip().lower()
-    if settings.TELEGRAM_CHAT_ID and chat_id != str(settings.TELEGRAM_CHAT_ID):
+
+    if not chat_id or not text:
+        return {"ok": True}
+
+    allowed_id = str(settings.TELEGRAM_CHAT_ID).strip()
+    if allowed_id and chat_id != allowed_id:
+        await send_telegram_alert(f"⚠️ Unauthorized Chat ID: {chat_id}. Set TELEGRAM_CHAT_ID={chat_id} in Render.", target_chat_id=chat_id)
         return {"ok": False}
 
-    if text == "/status":
+    if "start" in text or "status" in text:
         state = check_survival_condition(db)
         cap = get_total_capital(db, state)
+        pending_tasks = db.query(WorkerTask).filter(WorkerTask.status == "PENDING").count()
+        loop_txt = "RUNNING" if AUTONOMY_STATE["auto_run_enabled"] else "PAUSED"
         await send_telegram_alert(
-            f"📊 AI SURVIVOR STATUS\nState: {state.survival_status}\nCapital: INR {cap:.2f}\n"
-            f"Real Revenue: INR {state.total_real_revenue:.2f}\nCycles: {state.cycle_count}\nStore: {settings.PUBLIC_STORE_URL}"
+            f"📊 NOVACRAFT AUTONOMOUS CONTROL\n"
+            f"• Survival: {state.survival_status}\n"
+            f"• Total Capital: ₹{cap:.2f}\n"
+            f"• Real Revenue: +₹{state.total_real_revenue:.2f}\n"
+            f"• Cycles Done: {state.cycle_count} | Worker Queue: {pending_tasks}\n"
+            f"• 30s Auto-Loop: {loop_txt}\n"
+            f"• Public Store: {settings.PUBLIC_STORE_URL}",
+            target_chat_id=chat_id,
         )
-    elif text == "/cycle":
+    elif "cycle" in text:
+        await send_telegram_alert("⏳ Running autonomous cycle now...", target_chat_id=chat_id)
         res = await execute_autonomous_cycle(db)
-        await send_telegram_alert(f"⚡ Cycle #{res.get('cycle')} executed. Total Capital: INR {res.get('total_capital', 0):.2f}")
-    elif text == "/pause":
-        AUTONOMY_STATE["auto_run_enabled"] = False
-        await send_telegram_alert("⏸️ Autonomous 24/7 loop PAUSED.")
-    elif text == "/resume":
+        await send_telegram_alert(f"⚡ Cycle #{res.get('cycle')} Executed!\nTotal Capital: ₹{res.get('total_capital', 0):.2f}", target_chat_id=chat_id)
+    elif "start 30s" in text or "resume" in text:
         AUTONOMY_STATE["auto_run_enabled"] = True
-        await send_telegram_alert("▶️ Autonomous 24/7 loop RESUMED.")
+        await send_telegram_alert("▶️ 30-Second Autonomous Loop STARTED!", target_chat_id=chat_id)
+    elif "pause" in text:
+        AUTONOMY_STATE["auto_run_enabled"] = False
+        await send_telegram_alert("⏸️ 30-Second Autonomous Loop PAUSED.", target_chat_id=chat_id)
+    elif "store" in text:
+        await send_telegram_alert(f"🛒 Public Storefront:\n{settings.PUBLIC_STORE_URL}\nFamPay UPI: {settings.FAMPAY_UPI_ID}", target_chat_id=chat_id)
+    elif "revenue" in text:
+        state = check_survival_condition(db)
+        orders_count = db.query(RealOrder).filter(RealOrder.status == "PAID_DELIVERED").count()
+        await send_telegram_alert(
+            f"💰 REVENUE & TREASURY REPORT\n"
+            f"• Real Cash Earned: +₹{state.total_real_revenue:.2f}\n"
+            f"• Verified Paid Orders: {orders_count}\n"
+            f"• Expenses: -₹{state.total_expenses:.2f}\n"
+            f"• Paper PnL: +₹{state.simulated_paper_pnl:.2f}",
+            target_chat_id=chat_id,
+        )
+    else:
+        await send_telegram_alert("👇 Tap any button from the menu below:", target_chat_id=chat_id)
     return {"ok": True}
 
 @router.get("/api/state", dependencies=[Depends(verify_admin_token)])
@@ -417,11 +497,7 @@ def download_artifact(file_name: str):
 
 @router.post("/api/cycle/run", dependencies=[Depends(verify_admin_token)])
 async def run_cycle(db: Session = Depends(get_db)):
-    res = await execute_autonomous_cycle(db)
-    await send_telegram_alert(
-        f"⚡ AI SURVIVOR Cycle #{res.get('cycle')} Complete | Capital: INR {res.get('total_capital', 0):.2f}"
-    )
-    return res
+    return await execute_autonomous_cycle(db)
 
 @router.post("/api/agents", dependencies=[Depends(verify_admin_token)])
 def create_agent(payload: CreateAgentPayload, db: Session = Depends(get_db)):
@@ -503,8 +579,6 @@ def backup_db():
         raise HTTPException(status_code=404, detail="Database file not found yet.")
     Path("backups").mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = Path("backups") / f"ai_survivor_fampay_{ts}.db"
+    dest = Path("backups") / f"novacraft_prod_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}
-
-
