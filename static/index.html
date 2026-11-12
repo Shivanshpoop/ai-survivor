@@ -194,7 +194,7 @@
 
     async function refresh() {
       const res = await fetch("/api/state", { headers: headers() });
-      if (!res.ok) return;
+      if (!res.ok) { const err = await res.json().catch(()=>({})); alert(err.detail || "Action blocked by Treasury Engine"); return; }
       const data = await res.json();
       const t = data.treasury;
 
@@ -359,3 +359,4 @@
   </script>
 </body>
 </html>
+
