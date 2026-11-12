@@ -1,0 +1,65 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI SURVIVOR — Autonomous Digital Tools & Automation Store</title>
+  <style>
+    :root { --bg:#090d16; --card:#121927; --border:#24324a; --text:#f1f5f9; --muted:#94a3b8; --green:#10b981; --blue:#3b82f6; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 28px 18px; }
+    .wrap { max-width: 1050px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 32px; }
+    h1 { font-size: 2rem; margin-bottom: 8px; }
+    p.lead { color: var(--muted); font-size: 1rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; }
+    .tag { display: inline-block; background: rgba(59,130,246,0.18); color: var(--blue); font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; margin-bottom: 10px; }
+    .title { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+    .pitch { color: var(--muted); font-size: 0.88rem; line-height: 1.45; margin-bottom: 16px; }
+    .price-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+    .price { font-size: 1.4rem; font-weight: 800; color: var(--green); }
+    .btn { background: var(--green); color: #042117; border: none; padding: 9px 16px; border-radius: 7px; font-weight: 700; cursor: pointer; text-decoration: none; font-size: 0.9rem; }
+    .btn.alt { background: var(--blue); color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>⚡ AI SURVIVOR Digital Tools Store</h1>
+      <p class="lead">Production-tested Python automation scripts & business kits built autonomously by AI agents. Instant download.</p>
+    </header>
+    <div class="grid" id="catalog">Loading products...</div>
+  </div>
+  <script>
+    async function loadStore() {
+      const res = await fetch("/api/store/catalog");
+      const data = await res.json();
+      const box = document.getElementById("catalog");
+      if (!data.products || data.products.length === 0) {
+        box.innerHTML = "<p style='color:#94a3b8;'>New AI-built tools are being compiled. Check back in 60 seconds.</p>";
+        return;
+      }
+      box.innerHTML = data.products.map(p => `
+        <div class="card">
+          <div>
+            <span class="tag">${p.artifact_type}</span>
+            <div class="title">${p.file_name}</div>
+            <div class="pitch">${p.pitch_copy}</div>
+          </div>
+          <div class="price-row">
+            <div>
+              <div class="price">₹${p.price_inr.toFixed(0)}</div>
+              <div style="font-size:0.75rem; color:#94a3b8;">Built by ${p.built_by} • Sold: ${p.units_sold}</div>
+            </div>
+            ${p.payment_link
+              ? `<a class="btn" href="${p.payment_link}" target="_blank">Buy Now →</a>`
+              : `<span style="font-size:0.78rem; color:#f59e0b;">UPI / Razorpay Link Pending</span>`}
+          </div>
+        </div>
+      `).join("");
+    }
+    loadStore();
+  </script>
+</body>
+</html>

@@ -16,7 +16,7 @@ class TreasuryState(Base):
     total_real_revenue = Column(Float, default=0.0)
     total_expenses = Column(Float, default=0.0)
     simulated_paper_pnl = Column(Float, default=0.0)
-    paper_mode_only = Column(Boolean, default=True)
+    paper_mode_only = Column(Boolean, default=False)
     cycle_count = Column(Integer, default=0)
     destruction_reason = Column(Text, nullable=True)
     destroyed_at = Column(DateTime, nullable=True)
@@ -73,12 +73,26 @@ class DeliverableArtifact(Base):
     __tablename__ = "deliverable_artifacts"
     id = Column(String, primary_key=True, default=lambda: f"ART-{uuid.uuid4().hex[:6].upper()}")
     opportunity_id = Column(String, ForeignKey("opportunities.id"), nullable=True)
+    agent_id = Column(String, nullable=True)
     agent_name = Column(String, nullable=False)
     title = Column(String, nullable=False)
     artifact_type = Column(String, nullable=False)
     file_name = Column(String, nullable=False)
     suggested_price_inr = Column(Float, default=299.0)
     pitch_copy = Column(Text, nullable=False)
+    payment_link = Column(String, default="")
+    units_sold = Column(Integer, default=0)
+    created_at = Column(DateTime, default=utcnow)
+
+class RealOrder(Base):
+    __tablename__ = "real_orders"
+    id = Column(String, primary_key=True, default=lambda: f"ORD-{uuid.uuid4().hex[:8].upper()}")
+    payment_ref = Column(String, unique=True, nullable=False)
+    artifact_id = Column(String, ForeignKey("deliverable_artifacts.id"), nullable=False)
+    buyer_email = Column(String, default="customer@verified.in")
+    amount_inr = Column(Float, nullable=False)
+    download_token = Column(String, unique=True, default=lambda: uuid.uuid4().hex)
+    status = Column(String, default="PAID_DELIVERED")
     created_at = Column(DateTime, default=utcnow)
 
 class PaperBacktest(Base):

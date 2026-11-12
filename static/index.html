@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI SURVIVOR — Autonomous Production Command Center</title>
+  <title>AI SURVIVOR — Autonomous Real-Business Command Center</title>
   <style>
     :root {
       --bg: #0b0f17;
@@ -35,16 +35,17 @@
     }
     h1 { font-size: 1.35rem; }
     .sub { color: var(--muted); font-size: 0.85rem; }
-    input, select, button {
+    input, select, button, a.btn-link {
       background: var(--panel);
       color: var(--text);
       border: 1px solid var(--border);
       padding: 8px 11px;
       border-radius: 6px;
       font-size: 0.86rem;
+      text-decoration: none;
     }
-    button { cursor: pointer; font-weight: 600; }
-    button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    button, a.btn-link { cursor: pointer; font-weight: 600; }
+    button.primary, a.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
     button.success { background: var(--green); border-color: var(--green); color: #052016; }
     button.danger { background: var(--red); border-color: var(--red); color: #fff; }
     .badge {
@@ -53,7 +54,7 @@
       font-size: 0.74rem;
       font-weight: 700;
     }
-    .ALIVE, .ACTIVE, .LOW, .COMPLETED, .APPROVED, .APPROVED_PAPER { background: rgba(16,185,129,0.18); color: var(--green); }
+    .ALIVE, .ACTIVE, .LOW, .COMPLETED, .APPROVED, .APPROVED_PAPER, .PAID_DELIVERED { background: rgba(16,185,129,0.18); color: var(--green); }
     .DESTROYED, .CRITICAL, .REJECTED, .REJECTED_HIGH_RISK { background: rgba(239,68,68,0.2); color: var(--red); }
     .SUSPENDED, .ELEVATED, .SIM, .MEDIUM { background: rgba(245,158,11,0.2); color: var(--amber); }
     .grid-4 {
@@ -88,12 +89,13 @@
 <body>
   <header>
     <div>
-      <h1>AI SURVIVOR — Full Autonomous Production Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
-      <div class="sub">24/7 Autonomous Loop • Real Deliverable Artifacts • Paper Trading • Verified Real-Cash Revenue Gate</div>
+      <h1>AI SURVIVOR — Autonomous Real-Business Engine <span id="statusBadge" class="badge ALIVE">ALIVE</span></h1>
+      <div class="sub">Public Storefront • Automated Payment Webhook • Real Deliverable Builder • Telegram Remote Control</div>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <input type="password" id="tokenInput" placeholder="Paste ADMIN_TOKEN" />
       <button class="primary" onclick="connect()">Connect</button>
+      <a class="btn-link primary" href="/store" target="_blank">🛒 Open Public Store</a>
       <button class="success" id="cycleBtn" onclick="runCycle()">⚡ Run 1 Cycle</button>
       <button id="autoBtn" onclick="toggleAuto()">▶️ Start 24/7 Loop</button>
       <button onclick="backup()">Backup DB</button>
@@ -119,27 +121,27 @@
     <div class="row">
       <select id="revAgent"></select>
       <input type="number" id="revAmount" placeholder="Sale Amount (INR)" style="width:160px;" />
-      <input type="text" id="revDesc" placeholder="Customer / Invoice / Gumroad / UPI Ref" style="flex:1; min-width:220px;" />
+      <input type="text" id="revDesc" placeholder="Customer / UPI Ref / Gumroad Order" style="flex:1; min-width:220px;" />
       <button class="success" onclick="logVerifiedRevenue()">💰 Record Verified Real Sale</button>
     </div>
   </div>
 
   <div class="grid-2">
     <div class="card">
-      <h2>Built Products & Freelance Deliverables (Downloadable)</h2>
-      <div style="max-height:300px; overflow-y:auto;">
+      <h2>Storefront Products & Payment Link Connector</h2>
+      <div style="max-height:330px; overflow-y:auto;">
         <table>
-          <thead><tr><th>Deliverable</th><th>Price & Pitch</th><th>Download</th></tr></thead>
+          <thead><tr><th>Product</th><th>Price & Sales</th><th>Payment Link / File</th></tr></thead>
           <tbody id="artifacts"></tbody>
         </table>
       </div>
     </div>
     <div class="card">
-      <h2>Paper Trading Strategy Backtests (Sandbox Only)</h2>
-      <div style="max-height:300px; overflow-y:auto;">
+      <h2>Verified Customer Orders & Paper Backtests</h2>
+      <div style="max-height:330px; overflow-y:auto;">
         <table>
-          <thead><tr><th>Strategy</th><th>Metrics</th><th>Verdict</th></tr></thead>
-          <tbody id="backtests"></tbody>
+          <thead><tr><th>Order / Strategy</th><th>Details</th><th>Status</th></tr></thead>
+          <tbody id="ordersAndTests"></tbody>
         </table>
       </div>
     </div>
@@ -180,7 +182,7 @@
     async function downloadArtifact(fileName) {
       const res = await fetch(`/api/artifacts/download/${encodeURIComponent(fileName)}`, { headers: headers() });
       if (!res.ok) {
-        alert("Artifact not found on disk (run 1 cycle to generate fresh files).");
+        alert("File not on disk yet — click Run 1 Cycle to generate fresh files.");
         return;
       }
       const blob = await res.blob();
@@ -192,9 +194,20 @@
       URL.revokeObjectURL(url);
     }
 
+    async function savePayLink(artId) {
+      const link = prompt("Paste Razorpay / Gumroad / Topmate Payment Link for this product:");
+      if (!link) return;
+      const res = await fetch(`/api/artifacts/${artId}/payment-link`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ payment_link: link })
+      });
+      if (res.ok) refresh();
+    }
+
     async function refresh() {
       const res = await fetch("/api/state", { headers: headers() });
-      if (!res.ok) { const err = await res.json().catch(()=>({})); alert(err.detail || "Action blocked by Treasury Engine"); return; }
+      if (!res.ok) return;
       const data = await res.json();
       const t = data.treasury;
 
@@ -230,7 +243,10 @@
       `;
 
       const activeAgents = data.agents.filter(a => a.status === "ACTIVE");
-      const sel = document.getElementById("revAgent"); const prev = sel.value; sel.innerHTML = activeAgents.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join(""); if (prev && activeAgents.some(a => a.id === prev)) sel.value = prev;
+      const sel = document.getElementById("revAgent");
+      const prev = sel.value;
+      sel.innerHTML = activeAgents.map(a => `<option value="${a.id}">${a.name} (${a.id})</option>`).join("");
+      if (prev && activeAgents.some(a => a.id === prev)) sel.value = prev;
 
       document.getElementById("agents").innerHTML = data.agents.map(a => `
         <div class="agent-box">
@@ -251,19 +267,32 @@
 
       document.getElementById("artifacts").innerHTML = data.artifacts.map(d => `
         <tr>
-          <td><strong>${d.file_name}</strong><br/><span class="badge ACTIVE">${d.artifact_type}</span><br/><span class="sub">By ${d.agent_name}</span></td>
-          <td><strong>₹${d.suggested_price_inr.toFixed(0)}</strong><br/><span style="font-size:0.79rem;">${d.pitch_copy}</span></td>
-          <td><button class="primary" style="padding:5px 9px; font-size:0.78rem;" onclick="downloadArtifact('${d.file_name}')">Download</button></td>
+          <td><strong>${d.file_name}</strong><br/><span class="badge ACTIVE">${d.artifact_type}</span><br/><span class="sub">${d.pitch_copy}</span></td>
+          <td><strong>₹${d.suggested_price_inr.toFixed(0)}</strong><br/>Sold: ${d.units_sold}</td>
+          <td>
+            <button class="primary" style="padding:4px 8px; font-size:0.75rem; margin-bottom:4px;" onclick="downloadArtifact('${d.file_name}')">Download</button><br/>
+            <button class="success" style="padding:4px 8px; font-size:0.75rem;" onclick="savePayLink('${d.id}')">${d.payment_link ? "Edit Pay Link" : "+ Add Pay Link"}</button>
+          </td>
         </tr>
       `).join("");
 
-      document.getElementById("backtests").innerHTML = data.backtests.map(b => `
+      const orderRows = (data.orders || []).map(o => `
+        <tr>
+          <td><strong>${o.id}</strong><br/><span class="sub">${o.buyer_email}</span></td>
+          <td>Ref: ${o.payment_ref}<br/><strong>+₹${o.amount_inr.toFixed(2)}</strong></td>
+          <td><span class="badge PAID_DELIVERED">${o.status}</span></td>
+        </tr>
+      `).join("");
+
+      const btRows = (data.backtests || []).map(b => `
         <tr>
           <td><strong>${b.strategy_name}</strong><br/><span class="sub">${b.symbol}</span></td>
-          <td>Return: <strong>${b.net_return_pct}%</strong> | Win: ${b.win_rate_pct}%<br/>MaxDD: ${b.max_drawdown_pct}% | Sharpe: ${b.sharpe_ratio}</td>
+          <td>Ret: <strong>${b.net_return_pct}%</strong> | Win: ${b.win_rate_pct}% | Sharpe: ${b.sharpe_ratio}</td>
           <td><span class="badge ${b.verdict}">${b.verdict}</span></td>
         </tr>
       `).join("");
+
+      document.getElementById("ordersAndTests").innerHTML = orderRows + btRows;
 
       document.getElementById("msgs").innerHTML = data.messages.map(m => `
         <div style="padding:7px 0; border-bottom:1px solid var(--border); font-size:0.82rem;">
@@ -316,7 +345,7 @@
         document.getElementById("revDesc").value = "";
         refresh();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         alert(err.detail || "Failed to record real revenue");
       }
     }
@@ -359,5 +388,3 @@
   </script>
 </body>
 </html>
-
-

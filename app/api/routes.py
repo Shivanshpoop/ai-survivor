@@ -2,7 +2,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_admin_token
 from app.core.config import settings
-from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage, DeliverableArtifact, PaperBacktest
+from app.models.domain import Agent, LedgerEntry, AuditLog, Opportunity, AgentMessage, DeliverableArtifact, PaperBacktest, RealOrder
 from app.services.treasury_engine import (
     check_survival_condition,
     get_total_capital,
@@ -20,6 +20,7 @@ from app.services.treasury_engine import (
     record_expense,
     record_revenue,
     suspend_and_recall,
+    write_audit,
 )
 from app.agents.supreme_manager import execute_autonomous_cycle
 from app.services.telegram_notifier import send_telegram_alert
@@ -54,11 +55,129 @@ class RevenuePayload(BaseModel):
     verified_real_cash: bool = False
     idempotency_key: Optional[str] = None
 
+class PaymentLinkPayload(BaseModel):
+    payment_link: str
+
+class PublicCheckoutPayload(BaseModel):
+    artifact_id: str
+    buyer_email: str
+    payment_ref: str
+
+@router.get("/store")
+def public_store_page():
+    return FileResponse("static/store.html")
+
+@router.get("/api/store/catalog")
+def get_public_catalog(db: Session = Depends(get_db)):
+    items = db.query(DeliverableArtifact).order_by(DeliverableArtifact.created_at.desc()).all()
+    seen_slugs = set()
+    unique_items = []
+    for d in items:
+        if d.file_name not in seen_slugs:
+            seen_slugs.add(d.file_name)
+            unique_items.append({
+                "id": d.id,
+                "title": d.title,
+                "artifact_type": d.artifact_type,
+                "file_name": d.file_name,
+                "price_inr": d.suggested_price_inr,
+                "pitch_copy": d.pitch_copy,
+                "payment_link": d.payment_link or "",
+                "units_sold": d.units_sold or 0,
+                "built_by": d.agent_name,
+            })
+    return {"store_name": "AI SURVIVOR Digital Tools & Automation Store", "products": unique_items}
+
+@router.post("/api/artifacts/{artifact_id}/payment-link", dependencies=[Depends(verify_admin_token)])
+def set_artifact_payment_link(artifact_id: str, payload: PaymentLinkPayload, db: Session = Depends(get_db)):
+    art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == artifact_id).first()
+    if not art:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    art.payment_link = payload.payment_link.strip()
+    db.commit()
+    return {"id": art.id, "payment_link": art.payment_link}
+
+@router.post("/api/payments/webhook")
+async def automated_payment_webhook(
+    payload: PublicCheckoutPayload,
+    x_webhook_secret: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    if x_webhook_secret != settings.PAYMENT_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid payment webhook secret")
+
+    existing = db.query(RealOrder).filter(RealOrder.payment_ref == payload.payment_ref.strip()).first()
+    if existing:
+        return {
+            "status": "ALREADY_FULFILLED",
+            "order_id": existing.id,
+            "download_url": f"/api/store/fulfill/{existing.download_token}",
+        }
+
+    art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == payload.artifact_id).first()
+    if not art:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    agent = db.query(Agent).filter(Agent.id == art.agent_id).first()
+    if not agent:
+        agent = db.query(Agent).filter(Agent.status == "ACTIVE").first()
+    if not agent:
+        raise HTTPException(status_code=400, detail="No active agent available to credit revenue")
+
+    entry = record_revenue(
+        db=db,
+        agent_id=agent.id,
+        amount=art.suggested_price_inr,
+        description=f"REAL SALE [{payload.payment_ref}] {art.file_name} -> {payload.buyer_email}",
+        verified_real_cash=True,
+        idempotency_key=f"PAY-{payload.payment_ref.strip()}",
+    )
+
+    art.units_sold = (art.units_sold or 0) + 1
+    order = RealOrder(
+        payment_ref=payload.payment_ref.strip(),
+        artifact_id=art.id,
+        buyer_email=payload.buyer_email.strip(),
+        amount_inr=art.suggested_price_inr,
+    )
+    db.add(order)
+    write_audit(db, "PAYMENT_GATEWAY", "REAL_SALE_FULFILLED", f"Order {order.id}: +INR {art.suggested_price_inr:.2f} for {art.file_name}")
+    db.commit()
+    db.refresh(order)
+
+    await send_telegram_alert(
+        f"💰 REAL CUSTOMER SALE RECEIVED!\n"
+        f"Product: {art.file_name}\n"
+        f"Amount: +₹{art.suggested_price_inr:.2f}\n"
+        f"Buyer: {order.buyer_email}\n"
+        f"New Total Capital: ₹{entry.total_capital_after:.2f}"
+    )
+
+    return {
+        "status": "FULFILLED",
+        "order_id": order.id,
+        "download_url": f"/api/store/fulfill/{order.download_token}",
+        "total_capital": entry.total_capital_after,
+    }
+
+@router.get("/api/store/fulfill/{download_token}")
+def fulfill_paid_order(download_token: str, db: Session = Depends(get_db)):
+    order = db.query(RealOrder).filter(RealOrder.download_token == download_token).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Invalid or expired download token")
+    art = db.query(DeliverableArtifact).filter(DeliverableArtifact.id == order.artifact_id).first()
+    if not art:
+        raise HTTPException(status_code=404, detail="Product file missing")
+    target = Path("artifacts") / Path(art.file_name).name
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="File regenerated on next cycle; contact support with Order ID " + order.id)
+    return FileResponse(target, filename=art.file_name)
+
 @router.get("/health")
 def health():
     return {
         "status": "ok",
-        "phase": "PHASE_7_8_FULL_AUTONOMOUS_SYSTEM",
+        "phase": "REAL_PRODUCTION_STORE_AND_WEBHOOK",
         "auto_run_enabled": AUTONOMY_STATE["auto_run_enabled"],
         "paper_mode_only": settings.PAPER_MODE_ONLY,
     }
@@ -82,7 +201,7 @@ async def telegram_webhook(req: Request, db: Session = Depends(get_db)):
         cap = get_total_capital(db, state)
         await send_telegram_alert(
             f"📊 AI SURVIVOR STATUS\nState: {state.survival_status}\nCapital: INR {cap:.2f}\n"
-            f"Treasury: INR {state.treasury_balance:.2f}\nCycles: {state.cycle_count}\nAuto-Loop: {AUTONOMY_STATE['auto_run_enabled']}"
+            f"Real Revenue: INR {state.total_real_revenue:.2f}\nCycles: {state.cycle_count}\nStore: {settings.PUBLIC_STORE_URL}"
         )
     elif text == "/cycle":
         res = await execute_autonomous_cycle(db)
@@ -115,7 +234,8 @@ def get_system_state(db: Session = Depends(get_db)):
     agents = db.query(Agent).order_by(Agent.created_at.desc()).all()
     ledger = db.query(LedgerEntry).order_by(LedgerEntry.created_at.desc()).limit(40).all()
     opportunities = db.query(Opportunity).order_by(Opportunity.created_at.desc()).limit(15).all()
-    artifacts = db.query(DeliverableArtifact).order_by(DeliverableArtifact.created_at.desc()).limit(20).all()
+    artifacts = db.query(DeliverableArtifact).order_by(DeliverableArtifact.created_at.desc()).limit(25).all()
+    orders = db.query(RealOrder).order_by(RealOrder.created_at.desc()).limit(20).all()
     backtests = db.query(PaperBacktest).order_by(PaperBacktest.created_at.desc()).limit(15).all()
     messages = db.query(AgentMessage).order_by(AgentMessage.id.desc()).limit(30).all()
     audits = db.query(AuditLog).order_by(AuditLog.id.desc()).limit(25).all()
@@ -168,8 +288,20 @@ def get_system_state(db: Session = Depends(get_db)):
                 "file_name": d.file_name,
                 "suggested_price_inr": d.suggested_price_inr,
                 "pitch_copy": d.pitch_copy,
+                "payment_link": d.payment_link or "",
+                "units_sold": d.units_sold or 0,
             }
             for d in artifacts
+        ],
+        "orders": [
+            {
+                "id": o.id,
+                "payment_ref": o.payment_ref,
+                "buyer_email": o.buyer_email,
+                "amount_inr": o.amount_inr,
+                "status": o.status,
+            }
+            for o in orders
         ],
         "backtests": [
             {
@@ -331,6 +463,6 @@ def backup_db():
         raise HTTPException(status_code=404, detail="Database file not found yet.")
     Path("backups").mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = Path("backups") / f"ai_survivor_full_{ts}.db"
+    dest = Path("backups") / f"ai_survivor_real_{ts}.db"
     shutil.copy2(db_file, dest)
     return {"message": "Database backup created", "path": str(dest)}

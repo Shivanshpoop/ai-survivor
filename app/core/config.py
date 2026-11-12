@@ -1,7 +1,7 @@
 ﻿from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    APP_NAME: str = "AI SURVIVOR — Full Autonomous Production Engine"
+    APP_NAME: str = "AI SURVIVOR — Autonomous Real-Business Engine"
     ENVIRONMENT: str = "production"
     DATABASE_URL: str = "sqlite:///./ai_survivor_p1.db"
     ADMIN_TOKEN: str = "change-me-to-a-strong-secret-token-98765"
@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     INITIAL_CAPITAL: float = 5000.0
     EMERGENCY_RESERVE_RATIO: float = 0.20
     MAX_SINGLE_ALLOCATION_RATIO: float = 0.30
-    PAPER_MODE_ONLY: bool = True
+    PAPER_MODE_ONLY: bool = False
 
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.openai.com/v1"
@@ -17,7 +17,10 @@ class Settings(BaseSettings):
 
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
-    AUTO_CYCLE_INTERVAL_SECONDS: int = 60
+    AUTO_CYCLE_INTERVAL_SECONDS: int = 300
+
+    PAYMENT_WEBHOOK_SECRET: str = "survivor-pay-secret-2026"
+    PUBLIC_STORE_URL: str = "https://ai-survivor.onrender.com/store"
 
     class Config:
         env_file = ".env"

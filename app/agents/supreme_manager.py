@@ -15,6 +15,7 @@ from app.services.treasury_engine import (
     get_total_capital,
 )
 from app.execution.artifact_factory import build_deliverable_artifact, run_paper_strategy_backtest
+from app.services.telegram_notifier import send_telegram_alert
 from app.core.config import settings
 
 INITIAL_TEAM = [
@@ -61,19 +62,19 @@ RESEARCH_DATABASE = [
         "category": "AUTOMATION",
         "target_market": "Local Indian CAs & Small Retailers",
         "competitor_gap": "Existing ERP tools cost INR 5,000+/yr; merchants need a fast INR 499 one-time CLI tool.",
-        "business_plan": "1. Generate Python CSV deduplicator. 2. Package CLI utility. 3. Sell license at INR 499.",
+        "business_plan": "1. Generate Python CSV deduplicator. 2. Publish to /store. 3. Sell license at INR 499.",
         "estimated_cost": 45.0,
         "expected_revenue": 499.0,
         "risk_level": "LOW",
     },
     {
-        "title": "AI Prompt & Freelance Proposal Calculator Kit",
+        "title": "E-Commerce Seller Net Profit & RTO Calculator",
         "category": "DIGITAL_PRODUCT",
-        "target_market": "College Freelancers & Solo Agencies",
-        "competitor_gap": "Generic Notion templates lack Indian pricing tiers and scope-creep clauses.",
-        "business_plan": "1. Generate Markdown/RFP proposal kit. 2. List on Gumroad/Topmate at INR 299.",
-        "estimated_cost": 30.0,
-        "expected_revenue": 299.0,
+        "target_market": "Amazon, Flipkart & Meesho Sellers",
+        "competitor_gap": "Sellers lose money on hidden GST-on-fees and RTO return shipping.",
+        "business_plan": "1. Build net margin CLI calculator. 2. Publish to /store at INR 399.",
+        "estimated_cost": 35.0,
+        "expected_revenue": 399.0,
         "risk_level": "LOW",
     },
     {
@@ -81,9 +82,19 @@ RESEARCH_DATABASE = [
         "category": "FREELANCING",
         "target_market": "Real Estate & Coaching Institutes",
         "competitor_gap": "Agencies waste hours manually fixing +91 formatting and duplicate Excel rows.",
-        "business_plan": "1. Build +91 phone normalizer script. 2. Deliver batch cleaning at INR 450 per 5,000 rows.",
+        "business_plan": "1. Build +91 phone normalizer script. 2. Publish to /store at INR 450.",
         "estimated_cost": 40.0,
         "expected_revenue": 450.0,
+        "risk_level": "LOW",
+    },
+    {
+        "title": "UPI & Bank Statement Auto-Categorizer for ITR",
+        "category": "AUTOMATION",
+        "target_market": "Freelancers & Tax Consultants",
+        "competitor_gap": "Manual tagging of 1,000+ UPI rows takes hours during tax season.",
+        "business_plan": "1. Build CSV rule-based tagger. 2. Publish to /store at INR 599.",
+        "estimated_cost": 40.0,
+        "expected_revenue": 599.0,
         "risk_level": "LOW",
     },
     {
@@ -105,10 +116,10 @@ async def generate_llm_opportunity(cycle_num: int) -> dict | None:
     if not settings.LLM_API_KEY:
         return None
     prompt = (
-        f"You are the Market Research Agent inside AI SURVIVOR (starting capital INR 5000). "
-        f"Propose 1 ethical, legal, low-cost micro-business opportunity in India for Cycle #{cycle_num}. "
-        f"Return strictly valid JSON with keys: title, category, target_market, competitor_gap, business_plan, "
-        f"estimated_cost (number between 25 and 90), expected_revenue (number between 150 and 700), risk_level (LOW or MEDIUM)."
+        f"You are the Market Research Agent inside AI SURVIVOR (capital INR 5000). "
+        f"Propose 1 ethical, legal, high-demand Python tool or digital template for Indian SMBs/freelancers in Cycle #{cycle_num}. "
+        f"Return strictly valid JSON with keys: title, category (AUTOMATION or DIGITAL_PRODUCT), target_market, competitor_gap, business_plan, "
+        f"estimated_cost (number 25-80), expected_revenue (number 249-699), risk_level (LOW)."
     )
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
@@ -168,7 +179,7 @@ async def execute_autonomous_cycle(db: Session) -> dict:
     opp_data = await generate_llm_opportunity(cycle) or random.choice(RESEARCH_DATABASE)
 
     cost = float(opp_data.get("estimated_cost", 40.0))
-    rev = float(opp_data.get("expected_revenue", 300.0))
+    rev = float(opp_data.get("expected_revenue", 399.0))
     roi = round(((rev - cost) / max(1.0, cost)) * 100.0, 1)
 
     opp = Opportunity(
@@ -176,7 +187,7 @@ async def execute_autonomous_cycle(db: Session) -> dict:
         category=opp_data.get("category", "AUTOMATION"),
         target_market=opp_data.get("target_market", "Indian SMBs"),
         competitor_gap=opp_data.get("competitor_gap", "Manual workflow overhead."),
-        business_plan=opp_data.get("business_plan", "Build MVP -> Validate -> Monetize."),
+        business_plan=opp_data.get("business_plan", "Build MVP -> List on Store -> Sell."),
         estimated_cost=cost,
         expected_revenue=rev,
         roi_percent=roi,
@@ -235,11 +246,12 @@ async def execute_autonomous_cycle(db: Session) -> dict:
                     sim_gain = round(max(40.0, rev * (bt.net_return_pct / 10.0)), 2)
                     record_revenue(db, executor.id, sim_gain, f"Paper backtest return ({bt.id})", verified_real_cash=False)
             else:
-                art = build_deliverable_artifact(
+                art = await build_deliverable_artifact(
                     db=db,
                     opp_id=opp.id,
                     opp_title=opp.title,
                     category=opp.category,
+                    agent_id=executor.id,
                     agent_name=executor.name,
                     price_inr=rev,
                 )
@@ -248,15 +260,19 @@ async def execute_autonomous_cycle(db: Session) -> dict:
                     executor.name,
                     "SUPREME_MANAGER",
                     "ARTIFACT_BUILT",
-                    f"Built deliverable '{art.file_name}' ({art.artifact_type}). Ready for commercial listing at INR {rev:.2f}."
+                    f"Published '{art.file_name}' to Live Storefront ({settings.PUBLIC_STORE_URL}) at INR {art.suggested_price_inr:.2f}."
+                )
+                await send_telegram_alert(
+                    f"🚀 NEW PRODUCT LIVE ON STORE!\n"
+                    f"Product: {art.file_name}\n"
+                    f"Price: ₹{art.suggested_price_inr:.0f}\n"
+                    f"Pitch: {art.pitch_copy}\n"
+                    f"Store Link: {settings.PUBLIC_STORE_URL}"
                 )
                 if random.random() <= 0.80:
                     sim_gain = round(rev * random.uniform(0.85, 1.15), 2)
-                    record_revenue(db, executor.id, sim_gain, f"Simulated validation for {art.file_name}", verified_real_cash=False)
-                else:
-                    executor.performance_score = max(0.0, round(executor.performance_score - 12.0, 1))
+                    record_revenue(db, executor.id, sim_gain, f"Sandbox validation for {art.file_name}", verified_real_cash=False)
 
-    # Financial Intelligence: Auto-topup high-performing agent (score >= 70) if balance drops below INR 120
     for ag in db.query(Agent).filter(Agent.status == "ACTIVE").all():
         if ag.performance_score < 25.0:
             suspend_and_recall(db, ag.id, f"Performance score {ag.performance_score} below threshold 25.0")

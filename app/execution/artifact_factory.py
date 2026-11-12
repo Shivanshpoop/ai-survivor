@@ -1,8 +1,11 @@
-﻿import math
+﻿import json
+import math
 import random
+import httpx
 from pathlib import Path
 from sqlalchemy.orm import Session
 from app.models.domain import DeliverableArtifact, PaperBacktest
+from app.core.config import settings
 
 ARTIFACTS_DIR = Path("artifacts")
 ARTIFACTS_DIR.mkdir(exist_ok=True)
@@ -13,7 +16,7 @@ PRODUCT_CATALOG = [
         "ext": "py",
         "type": "PYTHON_AUTOMATION_SCRIPT",
         "price": 499.0,
-        "pitch": "GSTIN & Invoice CSV deduplicator for CAs/SMBs. Sell at ₹499.",
+        "pitch": "GSTIN & Invoice CSV deduplicator for CAs & Indian SMBs. Eliminates GSTR-2B mismatches in 2 seconds.",
         "code": '''import csv, sys
 
 def reconcile_gst(in_csv, out_csv):
@@ -40,7 +43,7 @@ if __name__ == "__main__":
         "ext": "py",
         "type": "FREELANCE_DELIVERABLE_SCRIPT",
         "price": 450.0,
-        "pitch": "+91 Indian phone normalizer & duplicate lead remover for agencies. ₹450/batch.",
+        "pitch": "+91 Indian phone normalizer & duplicate lead cleaner for Real Estate & Coaching agencies.",
         "code": '''import csv, re, sys
 
 def norm(p):
@@ -72,7 +75,7 @@ if __name__ == "__main__":
         "ext": "py",
         "type": "PYTHON_MICRO_SAAS_CLI",
         "price": 399.0,
-        "pitch": "Amazon/Flipkart/Meesho net margin, GST & RTO loss calculator for D2C sellers. ₹399.",
+        "pitch": "Amazon/Flipkart/Meesho true net profit, GST & RTO loss calculator for D2C sellers.",
         "code": '''def calc_margin(selling_price, cost_price, referral_pct=15.0, shipping=65.0, gst_pct=18.0, rto_pct=12.0):
     commission = selling_price * (referral_pct / 100.0)
     gst_on_fees = (commission + shipping) * (gst_pct / 100.0)
@@ -92,7 +95,7 @@ if __name__ == "__main__":
         "ext": "py",
         "type": "FINTECH_UTILITY_SCRIPT",
         "price": 599.0,
-        "pitch": "Auto-tags bank CSV transactions into Food, Travel, SaaS, Rent & Tax buckets. ₹599.",
+        "pitch": "Auto-tags bank/UPI CSV statements into Food, Travel, SaaS, Rent & Tax buckets for ITR prep.",
         "code": '''import csv, sys
 
 RULES = {"SWIGGY": "Food", "ZOMATO": "Food", "UBER": "Travel", "OLA": "Travel", "AWS": "Cloud/SaaS", "ZERODHA": "Investments"}
@@ -120,7 +123,7 @@ if __name__ == "__main__":
         "ext": "py",
         "type": "CAREER_TECH_TOOL",
         "price": 249.0,
-        "pitch": "Compares Resume text vs Job Description to highlight missing ATS keywords. ₹249.",
+        "pitch": "Instant offline ATS keyword matcher & missing skill extractor for job seekers & students.",
         "code": '''import re, sys
 from pathlib import Path
 
@@ -141,7 +144,7 @@ if __name__ == "__main__":
         "ext": "md",
         "type": "DIGITAL_PRODUCT_ASSET",
         "price": 299.0,
-        "pitch": "15 Indian agency RFP templates, scope-creep clauses & rate card. ₹299.",
+        "pitch": "15 Indian agency RFP templates, scope-creep clauses & rate card for solo developers.",
         "code": '''# Indian Freelance & Agency RFP + Scope-Creep Protection Kit
 ## 1. Payment Milestone Structure
 - **50% Kickoff Advance** (Non-refundable once architecture starts)
@@ -150,16 +153,58 @@ if __name__ == "__main__":
 
 ## 2. Scope-Creep Clause
 > Any feature, API integration, or UI revision outside the signed checklist is billed separately at ₹500/hour.
-
-## 3. Cold Outreach Script (WhatsApp / LinkedIn)
-"Hi [Name], noticed your team handles [Task] manually. I built a lightweight Python tool that automates it in 10 seconds with zero monthly fees. Want a 60-second demo?"
 '''
     },
 ]
 
-def build_deliverable_artifact(db: Session, opp_id: str, opp_title: str, category: str, agent_name: str, price_inr: float) -> DeliverableArtifact:
+async def generate_llm_product(opp_title: str, price_inr: float) -> dict | None:
+    if not settings.LLM_API_KEY:
+        return None
+    prompt = (
+        f"Build a complete, standalone, zero-dependency Python 3 script solving: '{opp_title}'. "
+        f"Return valid JSON with keys: slug (snake_case), type (PYTHON_TOOL), pitch (1-sentence commercial pitch in INR {price_inr}), "
+        f"code (complete working Python code with if __name__ == '__main__': block)."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=18.0) as client:
+            resp = await client.post(
+                f"{settings.LLM_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.LLM_API_KEY}"},
+                json={
+                    "model": settings.LLM_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            if resp.status_code == 200:
+                return json.loads(resp.json()["choices"][0]["message"]["content"])
+    except Exception:
+        return None
+    return None
+
+async def build_deliverable_artifact(db: Session, opp_id: str, opp_title: str, category: str, agent_id: str, agent_name: str, price_inr: float) -> DeliverableArtifact:
     ARTIFACTS_DIR.mkdir(exist_ok=True)
     existing_files = {d.file_name for d in db.query(DeliverableArtifact).all()}
+
+    llm_prod = await generate_llm_product(opp_title, price_inr)
+    if llm_prod and llm_prod.get("code"):
+        slug = "".join(c if c.isalnum() or c == "_" else "_" for c in llm_prod.get("slug", "ai_tool").lower())[:32]
+        file_name = f"{slug}_{len(existing_files)+1}.py"
+        (ARTIFACTS_DIR / file_name).write_text(llm_prod["code"], encoding="utf-8")
+        art = DeliverableArtifact(
+            opportunity_id=opp_id,
+            agent_id=agent_id,
+            agent_name=agent_name,
+            title=opp_title,
+            artifact_type=llm_prod.get("type", "PYTHON_AUTOMATION_SCRIPT"),
+            file_name=file_name,
+            suggested_price_inr=price_inr,
+            pitch_copy=llm_prod.get("pitch", f"Commercial tool for {opp_title}"),
+        )
+        db.add(art)
+        db.commit()
+        db.refresh(art)
+        return art
 
     chosen = next((p for p in PRODUCT_CATALOG if f"{p['slug']}.{p['ext']}" not in existing_files), None)
     if not chosen:
@@ -172,6 +217,7 @@ def build_deliverable_artifact(db: Session, opp_id: str, opp_title: str, categor
 
     art = DeliverableArtifact(
         opportunity_id=opp_id,
+        agent_id=agent_id,
         agent_name=agent_name,
         title=opp_title,
         artifact_type=chosen["type"],
